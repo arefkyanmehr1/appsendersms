@@ -1,0 +1,6 @@
+{
+  "name": "PayLink",
+  "description": "سیستم خودکار تأیید و تطبیق پرداخت بانکی از طریق پیامک برای مرچنت‌های PayLink",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

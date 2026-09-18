@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">PayLink</string>
+    <string name="connect">اتصال به درگاه</string>
+    <string name="disconnect">قطع اتصال و خروج</string>
+    <string name="api_key">کلید API</string>
+    <string name="api_key_hint">مثال: pl_usr_1234567890abcdef</string>
+    <string name="setup_title">راه‌اندازی حساب PayLink</string>
+    <string name="setup_desc">کلید API ارائه‌شده توسط پنل PayLink را وارد کنید تا اپلیکیشن برای تأیید خودکار پرداخت‌ها فعال شود.</string>
+    <string name="connecting">در حال برقراری ارتباط…</string>
+    <string name="err_invalid_api_key">کلید API نامعتبر است.</string>
+    <string name="err_account_disabled">حساب کاربری غیرفعال است.</string>
+    <string name="err_no_internet">اتصال به اینترنت برقرار نیست.</string>
+    <string name="err_server_error">سرور در دسترس نیست یا خطایی رخ داده است.</string>
+    <string name="err_payment_duplicate">این پرداخت قبلاً ثبت شده است.</string>
+    <string name="err_amount_mismatch">مبلغ پرداخت با فاکتور مطابقت ندارد.</string>
+    <string name="err_invoice_expired">فاکتور منقضی شده است.</string>
+    <string name="dashboard_title">پیشخوان PayLink</string>
+    <string name="pending_invoices">فاکتورهای در انتظار</string>
+    <string name="transaction_history">تاریخچه تراکنش‌ها</string>
+    <string name="settings">تنظیمات</string>
+    <string name="sms_permission_rationale">برای شناسایی خودکار پیامک‌های پرداخت، دسترسی موردنیاز است.</string>
+    <string name="grant_permission">اعطای دسترسی</string>
+    <string name="payment_verified_notification_title">پرداخت تأیید شد</string>
+    <string name="payment_verified_notification_desc">پرداخت سفارش %1$s با موفقیت تأیید شد.</string>
+    <string name="new_invoice_notification_title">فاکتور جدید در انتظار پرداخت</string>
+    <string name="new_invoice_notification_desc">سفارش جدید %1$s به مبلغ %2$s ثبت شد.</string>
+</resources>

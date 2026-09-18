@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="0"
+        android:translateY="0">
+        <!-- Shield Base -->
+        <path
+            android:fillColor="#10B981"
+            android:pathData="M54,26 C64,26 76,29 76,38 C76,57 65,71 54,78 C43,71 32,57 32,38 C32,29 44,26 54,26 Z" />
+        <!-- Inner Contrast Shield -->
+        <path
+            android:fillColor="#047857"
+            android:pathData="M54,30 C61.5,30 71,32.5 71,39.5 C71,54.5 62,66 54,72 C46,66 37,54.5 37,39.5 C37,32.5 46.5,30 54,30 Z" />
+        <!-- Verification Checkmark / Link -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M48,58 L41.5,51.5 C40.7,50.7 40.7,49.4 41.5,48.6 C42.3,47.8 43.6,47.8 44.4,48.6 L48,52.2 L63.6,36.6 C64.4,35.8 65.7,35.8 66.5,36.6 C67.3,37.4 67.3,38.7 66.5,39.5 L49.4,56.6 C48.6,57.4 47.4,57.4 46.6,56.6 Z" />
+        <!-- Accent Gold Dot on Top -->
+        <path
+            android:fillColor="#FBBF24"
+            android:pathData="M54,20 A3,3 0 1,0 54,26 A3,3 0 1,0 54,20 Z" />
+    </group>
+</vector>
