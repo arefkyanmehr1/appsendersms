@@ -93,8 +93,7 @@ class SmsProcessingCoordinator(
                             amount = parsedPayment.amount,
                             bankName = parsedPayment.bankName,
                             trackingCode = parsedPayment.trackingCode,
-                            cardLast4 = parsedPayment.cardLast4,
-                            rawSmsHash = parsedPayment.smsHash
+                            amount = parsedPayment.amount
                         )
 
                         // Attempt verification
@@ -141,6 +140,7 @@ class SmsProcessingCoordinator(
 
                                 // Refresh pending list immediately so the next queued SMS matches the subsequent invoice
                                 repository.getPendingInvoices(limit = 50)
+                                repository.deleteProcessedPaymentBySmsHash(parsedPayment.smsHash)
                                 paymentProcessed = true
                             }
 
