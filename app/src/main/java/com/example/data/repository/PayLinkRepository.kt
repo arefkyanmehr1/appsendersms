@@ -216,7 +216,7 @@ class PayLinkRepository(
                 return@withContext NetworkResult.Error(0, "عدم اتصال به اینترنت", ErrorType.NO_INTERNET)
             }
             try {
-                val response = api.verifyPayment(request.rawSmsHash, request)
+                val response = api.verifyPayment("verify|${request.orderId.trim()}|${request.amount}", request)
                 handleResponse(response) { body ->
                     val data = body.data
                     if (!body.success || data == null) {
@@ -309,13 +309,9 @@ class PayLinkRepository(
     ): NetworkResult<VerifyPaymentData> = withContext(Dispatchers.IO) {
         val safeOrderId = orderId.trim()
         if (safeOrderId.isBlank() || amount <= 0L) return@withContext NetworkResult.Error(422, "اطلاعات تأیید پرداخت نامعتبر است.", ErrorType.VALIDATION_ERROR)
-        val safeTracking = trackingCode?.let { CurrencyUtils.normalizePersianArabicDigits(it.trim()) }?.takeIf { it.isNotBlank() }
-            ?: "MANUAL-" + System.currentTimeMillis().toString().takeLast(10)
-        val cleanCard = cardLast4?.let { CurrencyUtils.normalizePersianArabicDigits(it.trim()).filter(Char::isDigit) }?.takeIf { it.length == 4 }
         val request = VerifyPaymentRequest(
-            orderId = safeOrderId, amount = amount, bankName = "تأیید دستی پذیرنده",
-            trackingCode = safeTracking, cardLast4 = cleanCard,
-            rawSmsHash = com.example.core.security.HashUtils.sha256Hex("manual|$safeOrderId|$amount|$safeTracking")
+            orderId = safeOrderId,
+            amount = amount
         )
         when (val result = verifyPayment(request)) {
             is NetworkResult.Success -> {
@@ -382,6 +378,10 @@ class PayLinkRepository(
     // Local DB Operations
     suspend fun recordProcessedPayment(entity: ProcessedPaymentEntity): Long = withContext(Dispatchers.IO) {
         database.processedPaymentDao().insert(entity)
+    }
+
+    suspend fun deleteProcessedPayment(id: Long) = withContext(Dispatchers.IO) {
+        database.processedPaymentDao().deleteById(id)
     }
 
     suspend fun findProcessedPaymentByHash(hash: String): ProcessedPaymentEntity? = withContext(Dispatchers.IO) {
