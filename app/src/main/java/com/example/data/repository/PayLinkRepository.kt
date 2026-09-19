@@ -384,6 +384,10 @@ class PayLinkRepository(
         database.processedPaymentDao().deleteById(id)
     }
 
+    suspend fun deleteProcessedPaymentBySmsHash(smsHash: String) = withContext(Dispatchers.IO) {
+        database.processedPaymentDao().deleteBySmsHash(smsHash)
+    }
+
     suspend fun findProcessedPaymentByHash(hash: String): ProcessedPaymentEntity? = withContext(Dispatchers.IO) {
         database.processedPaymentDao().findByHash(hash)
     }
