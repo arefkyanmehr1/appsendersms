@@ -28,6 +28,9 @@ interface ProcessedPaymentDao {
     @Query("SELECT * FROM processed_payments ORDER BY receivedAt DESC LIMIT 100")
     fun getAllFlow(): Flow<List<ProcessedPaymentEntity>>
 
+    @Query("DELETE FROM processed_payments WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
     @Query("DELETE FROM processed_payments")
     suspend fun deleteAll()
 }
