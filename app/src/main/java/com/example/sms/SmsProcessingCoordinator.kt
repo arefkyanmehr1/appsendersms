@@ -90,9 +90,6 @@ class SmsProcessingCoordinator(
 
                         val verifyReq = VerifyPaymentRequest(
                             orderId = matchedInvoice.orderId,
-                            amount = parsedPayment.amount,
-                            bankName = parsedPayment.bankName,
-                            trackingCode = parsedPayment.trackingCode,
                             amount = parsedPayment.amount
                         )
 
