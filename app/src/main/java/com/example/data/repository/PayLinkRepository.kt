@@ -115,8 +115,8 @@ class PayLinkRepository(
                     val rawInvoices = body.data.invoices ?: emptyList()
 
                     // Filter out any invoice that the merchant has already rejected locally
-                    // The backend is authoritative. A local rejection marker must never
-                    // hide a server-side pending invoice, especially after account changes.
+                    // Backend is authoritative; local rejection markers never hide server invoices.
+                    val activeInvoices = rawInvoices
 
                     // Detect brand new pending invoices to notify merchant
                     val notificationPrefs = com.example.core.util.NotificationPreferences(context)
