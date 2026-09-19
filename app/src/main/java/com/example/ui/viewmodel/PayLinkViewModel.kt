@@ -509,7 +509,6 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
 
     fun disconnect() {
         viewModelScope.launch {
-            stopLivePolling()
             app.cancelBackgroundWorkers()
             repository.disconnect()
             _authState.value = AuthState.NeedsSetup
