@@ -1,6 +1,5 @@
 package com.example.background
 
-import android.app.AlarmManager
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
@@ -9,8 +8,6 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
-import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.PayLinkApplication
@@ -32,24 +29,12 @@ class InvoiceMonitorService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private var pollJob: Job? = null
-    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         AppLogger.i("InvoiceMonitorService created.")
-        try {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
-            wakeLock = powerManager?.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "PayLink::InvoiceMonitorWakeLock"
-            )?.apply {
-                setReferenceCounted(false)
-            }
-        } catch (e: Exception) {
-            AppLogger.w("Could not acquire wake lock: ${e.message}")
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -77,47 +62,31 @@ class InvoiceMonitorService : Service() {
             val app = applicationContext as? PayLinkApplication ?: return@launch
             while (isActive) {
                 try {
-                    wakeLock?.acquire(3000)
                     if (app.secureStorage.hasApiKey()) {
                         // Polling pending invoices automatically syncs and triggers notifications for new invoices
                         app.repository.getPendingInvoices(limit = 50)
                     }
                 } catch (e: Exception) {
                     AppLogger.w("Background poll failed: ${e.message}")
-                } finally {
-                    try {
-                        if (wakeLock?.isHeld == true) {
-                            wakeLock?.release()
-                        }
-                    } catch (_: Exception) {
-                    }
                 }
-                // Check every 7 seconds for ultra-fast instant notification
-                delay(7_000)
+                // Background invoice polling is deliberately slower than event-driven SMS processing.
+                delay(15_000)
             }
         }
     }
 
+    override fun onTimeout(startId: Int) {
+        // Android 15+ limits dataSync foreground services to a total of 6 hours
+        // per 24h while the app is in the background. Stop cleanly when notified.
+        AppLogger.w("InvoiceMonitorService reached the Android foreground-service timeout.")
+        stopSelf()
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        AppLogger.i("App swiped away from recent tasks, scheduling immediate restart of InvoiceMonitorService.")
-        try {
-            val restartServiceIntent = Intent(applicationContext, InvoiceMonitorService::class.java).also {
-                it.setPackage(packageName)
-            }
-            val restartServicePendingIntent = PendingIntent.getService(
-                this, 1, restartServiceIntent,
-                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-            )
-            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-            alarmManager?.set(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                SystemClock.elapsedRealtime() + 1000,
-                restartServicePendingIntent
-            )
-        } catch (e: Exception) {
-            AppLogger.e("Failed to schedule service restart onTaskRemoved", e)
-        }
+        // Android may decide when a foreground service can be restarted. Avoid an
+        // aggressive AlarmManager restart loop that can waste battery.
+        AppLogger.i("InvoiceMonitorService task removed; service lifecycle is OS-managed.")
     }
 
     private fun createForegroundNotification(): Notification {
@@ -142,16 +111,10 @@ class InvoiceMonitorService : Service() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         AppLogger.i("InvoiceMonitorService destroyed.")
-        try {
-            if (wakeLock?.isHeld == true) {
-                wakeLock?.release()
-            }
-        } catch (_: Exception) {
-        }
         pollJob?.cancel()
         serviceScope.cancel()
+        super.onDestroy()
     }
 
     companion object {

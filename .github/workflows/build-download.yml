@@ -1,0 +1,81 @@
+name: Android Build Download
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'overhaul/fresh-production-fix'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Setup Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Generate temporary debug keystore
+        shell: bash
+        run: |
+          keytool -genkeypair \
+            -keystore "$GITHUB_WORKSPACE/debug.keystore" \
+            -storepass android \
+            -keypass android \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Build debug APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Package APK as ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)
+          test -n "$APK"
+          mkdir -p dist
+          cp "$APK" dist/AppSendersMS-debug.apk
+          sha256sum dist/AppSendersMS-debug.apk | tee dist/SHA256SUMS.txt
+          cd dist
+          zip -9 AppSendersMS-debug.zip AppSendersMS-debug.apk SHA256SUMS.txt
+          cd ..
+          ls -lh dist/*
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppSendersMS-debug-${{ github.sha }}
+          path: dist/AppSendersMS-debug.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppSendersMS-apk-${{ github.sha }}
+          path: dist/AppSendersMS-debug.apk
+          if-no-files-found: error
+          retention-days: 7

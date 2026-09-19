@@ -27,11 +27,7 @@ object PaymentMatcher {
 
         // Tier 1: Try exact amount match
         var candidateInvoices = pendingInvoices.filter { invoice ->
-            invoice.effectiveAmount == payment.amount ||
-            invoice.payableAmount == payment.amount ||
-            invoice.expectedAmount == payment.amount ||
-            invoice.baseAmount == payment.amount ||
-            invoice.amount == payment.amount
+            invoice.effectiveAmount > 0L && invoice.effectiveAmount == payment.amount
         }
 
         // Tier 2: If no exact match, check Toman/Rial factor of 10
@@ -39,9 +35,8 @@ object PaymentMatcher {
             candidateInvoices = pendingInvoices.filter { invoice ->
                 val eff = invoice.effectiveAmount
                 // Case: Invoice in Toman (e.g. 300,000) and Bank SMS in Rials (3,000,000)
-                (eff > 0 && eff * 10 == payment.amount) ||
-                // Case: Invoice in Rials (3,000,000) and Bank SMS in Toman (300,000)
-                (payment.amount * 10 == eff)
+                (eff > 0L && eff <= Long.MAX_VALUE / 10L && eff * 10L == payment.amount) ||
+                (payment.amount <= Long.MAX_VALUE / 10L && payment.amount * 10L == eff)
             }
         }
 
@@ -95,8 +90,8 @@ object PaymentMatcher {
         // Priority C: Strict FIFO (First-In First-Out) Chronological Priority:
         // Oldest invoice (created first) gets matched and satisfied first
         val sortedByOldest = validActiveInvoices.sortedWith(
-            compareBy<PendingInvoice> { it.id }
-                .thenBy { it.createdAt ?: "" }
+            compareBy<PendingInvoice> { it.createdAt ?: "" }
+                .thenBy { it.id }
                 .thenBy { it.remainingSeconds }
         )
 

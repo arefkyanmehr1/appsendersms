@@ -2,6 +2,7 @@ package com.example.sms
 
 import android.content.Context
 import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -89,11 +90,7 @@ class SmsProcessingCoordinator(
 
                         val verifyReq = VerifyPaymentRequest(
                             orderId = matchedInvoice.orderId,
-                            amount = parsedPayment.amount,
-                            bankName = parsedPayment.bankName,
-                            trackingCode = parsedPayment.trackingCode,
-                            cardLast4 = parsedPayment.cardLast4,
-                            rawSmsHash = parsedPayment.smsHash
+                            amount = parsedPayment.amount
                         )
 
                         // Attempt verification
@@ -140,6 +137,7 @@ class SmsProcessingCoordinator(
 
                                 // Refresh pending list immediately so the next queued SMS matches the subsequent invoice
                                 repository.getPendingInvoices(limit = 50)
+                                repository.deleteProcessedPaymentBySmsHash(parsedPayment.smsHash)
                                 paymentProcessed = true
                             }
 
@@ -251,6 +249,10 @@ class SmsProcessingCoordinator(
         val request = OneTimeWorkRequestBuilder<VerificationWorker>()
             .setConstraints(constraints)
             .build()
-        WorkManager.getInstance(context).enqueue(request)
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "PayLinkVerificationQueue",
+            ExistingWorkPolicy.KEEP,
+            request
+        )
     }
 }

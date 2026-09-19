@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.local.dao.CachedInvoiceDao
 import com.example.data.local.dao.NotifiedInvoiceDao
 import com.example.data.local.dao.ProcessedPaymentDao
@@ -20,7 +22,7 @@ import com.example.data.local.entity.RejectedInvoiceEntity
         NotifiedInvoiceEntity::class,
         RejectedInvoiceEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class PayLinkDatabase : RoomDatabase() {
@@ -34,6 +36,15 @@ abstract class PayLinkDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: PayLinkDatabase? = null
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Remove legacy fake rejection rows created by the old client.
+                // The server is now the source of truth for transaction history.
+                database.execSQL("DELETE FROM rejected_invoices")
+                database.execSQL("DELETE FROM processed_payments WHERE status = 'REJECTED' AND amount = 0")
+            }
+        }
+
         fun getInstance(context: Context): PayLinkDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -41,7 +52,7 @@ abstract class PayLinkDatabase : RoomDatabase() {
                     PayLinkDatabase::class.java,
                     "paylink_database"
                 )
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(MIGRATION_4_5)
                     .build()
                 INSTANCE = instance
                 instance

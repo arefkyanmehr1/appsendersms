@@ -341,9 +341,9 @@ fun DashboardScreen(
 
                         Text(
                             text = if (hasSmsPermission && hasNotificationPermission) {
-                                "پیامک‌های واریز بانکی دریافت شده بر روی این دستگاه به صورت محلی بررسی شده و پس از تطبیق با فاکتورهای باز، در درگاه تأیید می‌شوند."
+                                "پیامک‌های بانکی فقط روی همین دستگاه بررسی می‌شوند و متن آن‌ها به سرور ارسال نمی‌شود. پس از تطبیق مبلغ با فاکتور باز، فقط نتیجه تأیید به سرور ارسال می‌شود."
                             } else {
-                                "برای شناسایی خودکار پیامک‌های پرداخت و دریافت اعلان‌های لحظه‌ای فاکتورها، نیاز به تأیید دسترسی‌ها دارید."
+                                "پیامک‌های بانکی فقط روی همین دستگاه تحلیل می‌شوند؛ متن پیامک به سرور ارسال نمی‌شود. فقط نتیجه تطبیق (شناسه سفارش و مبلغ) برای تأیید به سرور ارسال می‌شود."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -355,8 +355,7 @@ fun DashboardScreen(
                             Button(
                                 onClick = {
                                     val perms = mutableListOf(
-                                        Manifest.permission.RECEIVE_SMS,
-                                        Manifest.permission.READ_SMS
+                                        Manifest.permission.RECEIVE_SMS
                                     )
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                         perms.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -380,7 +379,7 @@ fun DashboardScreen(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("اعطای دسترسی به پیامک و اعلان‌ها", fontWeight = FontWeight.Bold)
+                                Text("فعال‌سازی دریافت پیامک و اعلان‌ها", fontWeight = FontWeight.Bold)
                             }
                         }
                     }

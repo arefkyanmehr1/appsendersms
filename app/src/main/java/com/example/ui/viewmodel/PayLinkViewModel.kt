@@ -14,7 +14,6 @@ import com.example.data.local.entity.ProcessedPaymentEntity
 import com.example.data.model.AccountStatusData
 import com.example.data.model.PendingInvoice
 import com.example.data.model.TransactionItem
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -150,26 +149,36 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
-    fun rejectInvoice(orderId: String, reason: String = "سفارش توسط پذیرنده رد شد") {
+    fun rejectInvoice(orderId: String, reason: String = "سفارش توسط پذیرنده رد شد", amount: Long = 0L) {
         viewModelScope.launch {
-            // Optimistic update: mark as rejecting and remove from active list immediately
             _invoicesState.value = _invoicesState.value.copy(
-                rejectingOrderIds = _invoicesState.value.rejectingOrderIds + orderId,
-                invoices = _invoicesState.value.invoices.filter { it.orderId != orderId }
+                rejectingOrderIds = _invoicesState.value.rejectingOrderIds + orderId, errorMessage = null
             )
-
-            val result = repository.rejectInvoice(orderId, reason)
-            _invoicesState.value = _invoicesState.value.copy(
-                rejectingOrderIds = _invoicesState.value.rejectingOrderIds - orderId,
-                successMessage = "سفارش $orderId با موفقیت لغو شد و وب‌هوک به فروشگاه/ربات ارسال گردید.",
-                errorMessage = null
-            )
-            // Auto-clear success message after 5 seconds
-            launch {
-                delay(5000)
-                clearInvoiceMessages()
+            when (val result = repository.rejectInvoice(orderId, reason, amount)) {
+                is NetworkResult.Success -> {
+                    _invoicesState.value = _invoicesState.value.copy(
+                        rejectingOrderIds = _invoicesState.value.rejectingOrderIds - orderId,
+                        invoices = _invoicesState.value.invoices.filter { it.orderId != orderId },
+                        successMessage = "سفارش ${'$'}orderId با موفقیت توسط سرور لغو شد.", errorMessage = null
+                    )
+                    refreshTransactions(1)
+                }
+                is NetworkResult.Error -> {
+                    _invoicesState.value = _invoicesState.value.copy(
+                        rejectingOrderIds = _invoicesState.value.rejectingOrderIds - orderId,
+                        errorMessage = "رد سفارش ناموفق بود: ${'$'}{result.errorType.toPersianMessage(result.message)}"
+                    )
+                    refreshPendingInvoices()
+                }
+                is NetworkResult.Exception -> {
+                    _invoicesState.value = _invoicesState.value.copy(
+                        rejectingOrderIds = _invoicesState.value.rejectingOrderIds - orderId,
+                        errorMessage = "ارتباط با سرور برای رد سفارش برقرار نشد."
+                    )
+                    refreshPendingInvoices()
+                }
             }
-            repository.getPendingInvoices(limit = 50)
+            launch { delay(5000); clearInvoiceMessages() }
         }
     }
 
@@ -219,57 +228,6 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private var livePollingJob: Job? = null
-
-    private fun startLivePolling() {
-        livePollingJob?.cancel()
-        livePollingJob = viewModelScope.launch {
-            while (true) {
-                delay(4_000) // Fast 4-second polling while app is active for instant notification & state updates
-                if (secureStorage.hasApiKey()) {
-                    repository.getPendingInvoices(limit = 50)
-                }
-            }
-        }
-    }
-
-    private fun stopLivePolling() {
-        livePollingJob?.cancel()
-        livePollingJob = null
-    }
-
-    init {
-        if (secureStorage.hasApiKey()) {
-            refreshAll()
-            startLivePolling()
-        }
-
-        // Keep UI reactive to database cache updates immediately
-        viewModelScope.launch {
-            repository.cachedPendingInvoices.collect { cachedList ->
-                val models = cachedList.map {
-                    PendingInvoice(
-                        id = it.id,
-                        orderId = it.orderId,
-                        baseAmount = it.baseAmount,
-                        payableAmount = it.payableAmount,
-                        expectedAmount = it.expectedAmount,
-                        status = it.status,
-                        createdAt = it.createdAt,
-                        expiresAt = it.expiresAt,
-                        remainingSeconds = it.remainingSeconds,
-                        customerName = it.customerName,
-                        customerPhone = it.customerPhone,
-                        customerUsername = it.customerUsername,
-                        description = it.description,
-                        extraData = it.extraData
-                    )
-                }
-                _invoicesState.value = _invoicesState.value.copy(invoices = models)
-            }
-        }
-    }
-
     private val webAuthService = WebAuthService()
 
     fun loginWithCredentials(username: String, password: String) {
@@ -287,8 +245,13 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
             _isConnecting.value = true
             _setupError.value = null
 
+            val previousKey = secureStorage.getApiKey()
+
             when (val authResult = webAuthService.loginWithCredentials(trimmed, password)) {
                 is WebAuthResult.Success -> {
+                    if (previousKey == null || previousKey != authResult.apiKey) {
+                        repository.clearLocalAccountData()
+                    }
                     secureStorage.saveApiKey(authResult.apiKey)
                     when (val result = repository.getAccountStatus()) {
                         is NetworkResult.Success -> {
@@ -303,15 +266,14 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
                             )
                             repository.sendHeartbeat()
                             refreshPendingInvoices()
-                            startLivePolling()
-                        }
+                                        }
                         else -> {
                             _isConnecting.value = false
                             app.scheduleBackgroundWorkers()
                             _authState.value = AuthState.Connected
                             repository.sendHeartbeat()
                             refreshPendingInvoices()
-                            startLivePolling()
+
                         }
                     }
                 }
@@ -334,6 +296,11 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
             _isConnecting.value = true
             _setupError.value = null
 
+            val previousKey = secureStorage.getApiKey()
+            if (previousKey == null || previousKey != trimmed) {
+                repository.clearLocalAccountData()
+            }
+
             secureStorage.saveApiKey(trimmed)
 
             when (val result = repository.getAccountStatus()) {
@@ -350,7 +317,7 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
                     // Initial heartbeat and pending sync
                     repository.sendHeartbeat()
                     refreshPendingInvoices()
-                    startLivePolling()
+
                 }
 
                 is NetworkResult.Error -> {
@@ -542,7 +509,6 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
 
     fun disconnect() {
         viewModelScope.launch {
-            stopLivePolling()
             app.cancelBackgroundWorkers()
             repository.disconnect()
             _authState.value = AuthState.NeedsSetup

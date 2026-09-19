@@ -20,146 +20,97 @@ class SecureApiKeyStorage(context: Context) {
         private const val PREFS_NAME = "paylink_secure_prefs"
         private const val KEY_ALIAS = "PayLinkApiKeyAlias"
         private const val ANDROID_KEY_STORE = "AndroidKeyStore"
-        private const val CIPHER_TRANSFORMATION = "AES/GCM/NoPadding"
-        private const val PREF_ENCRYPTED_API_KEY = "enc_api_key"
-        private const val PREF_IV = "enc_iv"
-        private const val PREF_BACKUP_KEY = "backup_api_key"
+        private const val TRANSFORMATION = "AES/GCM/NoPadding"
+        private const val PREF_CIPHERTEXT = "api_key_ciphertext"
+        private const val PREF_IV = "api_key_iv"
         private const val GCM_TAG_LENGTH = 128
     }
 
     @Volatile
-    private var inMemoryApiKey: String? = null
+    private var memoryKey: String? = null
 
-    private fun getOrCreateSecretKey(): SecretKey {
-        val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
-        if (keyStore.containsAlias(KEY_ALIAS)) {
-            val entry = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
-            if (entry != null) {
-                return entry.secretKey
-            }
-        }
+    private fun key(): SecretKey {
+        val ks = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
+        (ks.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
 
-        val keyGenerator = KeyGenerator.getInstance(
-            KeyProperties.KEY_ALGORITHM_AES,
-            ANDROID_KEY_STORE
+        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
+        generator.init(
+            KeyGenParameterSpec.Builder(
+                KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setKeySize(256)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .build()
         )
-        val spec = KeyGenParameterSpec.Builder(
-            KEY_ALIAS,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-        )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(256)
-            .build()
-        keyGenerator.init(spec)
-        return keyGenerator.generateKey()
+        return generator.generateKey()
     }
 
     @Synchronized
     fun saveApiKey(apiKey: String) {
-        val trimmed = apiKey.trim()
-        if (trimmed.isBlank()) return
-        inMemoryApiKey = trimmed
+        val value = apiKey.trim()
+        require(value.isNotEmpty()) { "API key must not be blank" }
 
-        val backupEnc = Base64.encodeToString(trimmed.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-        val editor = prefs.edit().putString(PREF_BACKUP_KEY, backupEnc)
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, key())
 
-        try {
-            val secretKey = getOrCreateSecretKey()
-            val cipher = Cipher.getInstance(CIPHER_TRANSFORMATION)
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey)
-            val iv = cipher.iv
-            val encryptedBytes = cipher.doFinal(trimmed.toByteArray(Charsets.UTF_8))
+        val ciphertext = Base64.encodeToString(cipher.doFinal(value.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
+        val iv = Base64.encodeToString(cipher.iv, Base64.NO_WRAP)
 
-            val encBase64 = Base64.encodeToString(encryptedBytes, Base64.NO_WRAP)
-            val ivBase64 = Base64.encodeToString(iv, Base64.NO_WRAP)
-
-            editor.putString(PREF_ENCRYPTED_API_KEY, encBase64)
-                .putString(PREF_IV, ivBase64)
+        check(
+            prefs.edit()
+                .putString(PREF_CIPHERTEXT, ciphertext)
+                .putString(PREF_IV, iv)
                 .commit()
-        } catch (e: Exception) {
-            editor.putString(PREF_ENCRYPTED_API_KEY, backupEnc)
-                .putString(PREF_IV, "plain_fallback")
-                .commit()
-        }
+        ) { "Could not persist API key" }
+
+        memoryKey = value
     }
 
     @Synchronized
     fun getApiKey(): String? {
-        if (!inMemoryApiKey.isNullOrBlank()) {
-            return inMemoryApiKey
+        memoryKey?.takeIf { it.isNotBlank() }?.let { return it }
+
+        val ciphertext = prefs.getString(PREF_CIPHERTEXT, null) ?: return null
+        val ivText = prefs.getString(PREF_IV, null) ?: return null
+
+        return try {
+            val ks = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
+            val secret = (ks.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
+                ?: return null
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(
+                Cipher.DECRYPT_MODE,
+                secret,
+                GCMParameterSpec(GCM_TAG_LENGTH, Base64.decode(ivText, Base64.NO_WRAP))
+            )
+            String(
+                cipher.doFinal(Base64.decode(ciphertext, Base64.NO_WRAP)),
+                Charsets.UTF_8
+            ).also { if (it.isNotBlank()) memoryKey = it }
+        } catch (_: Exception) {
+            null
         }
-
-        // Try decrypting with KeyStore
-        val encBase64 = prefs.getString(PREF_ENCRYPTED_API_KEY, null)
-        val ivBase64 = prefs.getString(PREF_IV, null)
-
-        if (!encBase64.isNullOrBlank() && !ivBase64.isNullOrBlank()) {
-            if (ivBase64 == "plain_fallback") {
-                val key = String(Base64.decode(encBase64, Base64.NO_WRAP), Charsets.UTF_8)
-                inMemoryApiKey = key
-                return key
-            }
-
-            try {
-                val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
-                val secretKey = (keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
-                if (secretKey != null) {
-                    val iv = Base64.decode(ivBase64, Base64.NO_WRAP)
-                    val encryptedBytes = Base64.decode(encBase64, Base64.NO_WRAP)
-
-                    val cipher = Cipher.getInstance(CIPHER_TRANSFORMATION)
-                    val spec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
-                    cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
-                    val decryptedBytes = cipher.doFinal(encryptedBytes)
-                    val key = String(decryptedBytes, Charsets.UTF_8)
-                    inMemoryApiKey = key
-                    return key
-                }
-            } catch (_: Exception) {}
-        }
-
-        // Fallback to backup key in prefs
-        val backupEnc = prefs.getString(PREF_BACKUP_KEY, null)
-        if (!backupEnc.isNullOrBlank()) {
-            try {
-                val key = String(Base64.decode(backupEnc, Base64.NO_WRAP), Charsets.UTF_8)
-                inMemoryApiKey = key
-                return key
-            } catch (_: Exception) {}
-        }
-
-        return null
     }
 
-    fun hasApiKey(): Boolean {
-        return !getApiKey().isNullOrBlank()
-    }
+    fun hasApiKey(): Boolean = !getApiKey().isNullOrBlank()
 
     @Synchronized
     fun clearApiKey() {
-        inMemoryApiKey = null
-        prefs.edit()
-            .remove(PREF_ENCRYPTED_API_KEY)
-            .remove(PREF_IV)
-            .remove(PREF_BACKUP_KEY)
-            .commit()
+        memoryKey = null
+        prefs.edit().remove(PREF_CIPHERTEXT).remove(PREF_IV).commit()
         try {
-            val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
-            if (keyStore.containsAlias(KEY_ALIAS)) {
-                keyStore.deleteEntry(KEY_ALIAS)
-            }
-        } catch (_: Exception) {}
+            KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
+                .takeIf { it.containsAlias(KEY_ALIAS) }
+                ?.deleteEntry(KEY_ALIAS)
+        } catch (_: Exception) {
+        }
     }
 
     fun getMaskedApiKey(): String {
-        val key = getApiKey() ?: return "---"
-        if (key.length <= 8) {
-            return "********"
-        }
-        val prefix = key.take(6)
-        val suffix = key.takeLast(4)
-        val stars = "*".repeat(12)
-        return "$prefix$stars$suffix"
+        val value = getApiKey() ?: return "---"
+        if (value.length <= 8) return "********"
+        return value.take(6) + "************" + value.takeLast(4)
     }
 }
