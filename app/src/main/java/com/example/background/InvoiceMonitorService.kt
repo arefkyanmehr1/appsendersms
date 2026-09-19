@@ -75,6 +75,13 @@ class InvoiceMonitorService : Service() {
         }
     }
 
+    override fun onTimeout(startId: Int) {
+        // Android 15+ limits dataSync foreground services to a total of 6 hours
+        // per 24h while the app is in the background. Stop cleanly when notified.
+        AppLogger.w("InvoiceMonitorService reached the Android foreground-service timeout.")
+        stopSelf()
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         // Android may decide when a foreground service can be restarted. Avoid an
