@@ -244,7 +244,7 @@ class PayLinkRepository(
     ): NetworkResult<Boolean> = withContext(Dispatchers.IO) {
         if (!DeviceUtils.isNetworkAvailable(context)) return@withContext NetworkResult.Error(0, "برای رد سفارش باید اتصال اینترنت برقرار باشد.", ErrorType.NO_INTERNET)
         try {
-            val response = api.rejectInvoice(RejectInvoiceRequest(orderId.trim(), "reject", "rejected", reason, amount.takeIf { it > 0L }))
+            val response = api.rejectInvoice("reject|${orderId.trim()}", RejectInvoiceRequest(orderId.trim(), "reject", "rejected", reason, amount.takeIf { it > 0L }))
             val body = response.body()
             if (!response.isSuccessful || body?.success != true) return@withContext handleResponse(response) { NetworkResult.Error(response.code(), it.message ?: "رد سفارش توسط سرور تأیید نشد.", ErrorType.UNKNOWN) }
             database.rejectedInvoiceDao().markRejected(RejectedInvoiceEntity(orderId = orderId.trim(), reason = reason))
@@ -300,12 +300,12 @@ class PayLinkRepository(
     ): NetworkResult<VerifyPaymentData> = withContext(Dispatchers.IO) {
         if (amount <= 0L) return@withContext NetworkResult.Error(422, "مبلغ تأیید باید بیشتر از صفر باشد.", ErrorType.VALIDATION_ERROR)
         val safeTracking = trackingCode?.let { CurrencyUtils.normalizePersianArabicDigits(it.trim()) }?.takeIf { it.isNotBlank() }
-            ?: "MANUAL-${'$'}{System.currentTimeMillis().toString().takeLast(10)}"
+            ?: "MANUAL-${System.currentTimeMillis().toString().takeLast(10)}"
         val cleanCard = cardLast4?.let { CurrencyUtils.normalizePersianArabicDigits(it.trim()).filter(Char::isDigit) }?.takeIf { it.length == 4 }
         val request = VerifyPaymentRequest(
             orderId = orderId.trim(), amount = amount, bankName = "تأیید دستی پذیرنده",
             trackingCode = safeTracking, cardLast4 = cleanCard,
-            rawSmsHash = com.example.core.security.HashUtils.sha256Hex("manual|${'$'}{orderId.trim()}|${'$'}amount|${'$'}safeTracking")
+            rawSmsHash = com.example.core.security.HashUtils.sha256Hex("manual|${orderId.trim()}|$amount|$safeTracking")
         )
         when (val result = verifyPayment(request)) {
             is NetworkResult.Success -> {
