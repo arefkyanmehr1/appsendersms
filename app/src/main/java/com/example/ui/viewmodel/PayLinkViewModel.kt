@@ -208,29 +208,9 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private var livePollingJob: Job? = null
-
-    private fun startLivePolling() {
-        livePollingJob?.cancel()
-        livePollingJob = viewModelScope.launch {
-            while (true) {
-                delay(15_000)
-                if (secureStorage.hasApiKey()) {
-                    repository.getPendingInvoices(limit = 50)
-                }
-            }
-        }
-    }
-
-    private fun stopLivePolling() {
-        livePollingJob?.cancel()
-        livePollingJob = null
-    }
-
     init {
         if (secureStorage.hasApiKey()) {
             refreshAll()
-            startLivePolling()
         }
 
         // Keep UI reactive to database cache updates immediately
@@ -292,7 +272,6 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
                             )
                             repository.sendHeartbeat()
                             refreshPendingInvoices()
-                            startLivePolling()
                         }
                         else -> {
                             _isConnecting.value = false
@@ -339,7 +318,6 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
                     // Initial heartbeat and pending sync
                     repository.sendHeartbeat()
                     refreshPendingInvoices()
-                    startLivePolling()
                 }
 
                 is NetworkResult.Error -> {
