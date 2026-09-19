@@ -23,6 +23,11 @@ jobs:
           java-version: '17'
           cache: gradle
 
+      - name: Setup Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: '9.3.1'
+
       - name: Generate temporary debug keystore
         shell: bash
         run: |
