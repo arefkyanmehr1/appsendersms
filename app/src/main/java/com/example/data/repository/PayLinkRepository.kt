@@ -221,7 +221,7 @@ class PayLinkRepository(
                 return@withContext NetworkResult.Error(0, "عدم اتصال به اینترنت", ErrorType.NO_INTERNET)
             }
             try {
-                val response = api.verifyPayment(request)
+                val response = api.verifyPayment(request.rawSmsHash, request)
                 handleResponse(response) { body ->
                     if (body.success && body.data != null) {
                         NetworkResult.Success(body.data)
@@ -245,6 +245,7 @@ class PayLinkRepository(
         }
         try {
             val response = api.rejectInvoice(
+                "reject|${orderId}",
                 com.example.data.model.RejectInvoiceRequest(
                     orderId = orderId, action = "reject", status = "rejected", reason = reason,
                     amount = amount.takeIf { it > 0L }
