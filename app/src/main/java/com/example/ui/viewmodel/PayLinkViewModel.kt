@@ -274,7 +274,7 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
                             _authState.value = AuthState.Connected
                             repository.sendHeartbeat()
                             refreshPendingInvoices()
-                            startLivePolling()
+
                         }
                     }
                 }
@@ -318,7 +318,7 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
                     // Initial heartbeat and pending sync
                     repository.sendHeartbeat()
                     refreshPendingInvoices()
-                    startLivePolling()
+
                 }
 
                 is NetworkResult.Error -> {
