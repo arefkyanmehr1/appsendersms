@@ -246,12 +246,12 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
             _setupError.value = null
 
             val previousKey = secureStorage.getApiKey()
-            if (previousKey == null || previousKey != trimmed) {
-                repository.clearLocalAccountData()
-            }
 
             when (val authResult = webAuthService.loginWithCredentials(trimmed, password)) {
                 is WebAuthResult.Success -> {
+                    if (previousKey == null || previousKey != authResult.apiKey) {
+                        repository.clearLocalAccountData()
+                    }
                     secureStorage.saveApiKey(authResult.apiKey)
                     when (val result = repository.getAccountStatus()) {
                         is NetworkResult.Success -> {
