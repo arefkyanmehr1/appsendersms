@@ -463,6 +463,18 @@ class PayLinkRepository(
         }
     }
 
+    suspend fun clearLocalAccountData() = withContext(Dispatchers.IO) {
+        try {
+            database.cachedInvoiceDao().deleteAll()
+            database.processedPaymentDao().deleteAll()
+            database.notifiedInvoiceDao().deleteAll()
+            database.rejectedInvoiceDao().clearAll()
+            com.example.sms.SmsProcessingCoordinator.clearSettledMemory()
+        } catch (e: Exception) {
+            AppLogger.e("Failed to clear account-local data", e)
+        }
+    }
+
     suspend fun disconnect() = withContext(Dispatchers.IO) {
         secureStorage.clearApiKey()
         database.cachedInvoiceDao().deleteAll()
