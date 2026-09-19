@@ -23,6 +23,20 @@ enum class ErrorType {
 }
 
 fun ErrorType.toPersianMessage(fallbackMessage: String? = null): String {
+    val cleanFallback = fallbackMessage?.let { raw ->
+        if (raw.trim().startsWith("{") && raw.contains("\"message\"")) {
+            try {
+                val json = org.json.JSONObject(raw)
+                val msg = json.optString("message", "")
+                if (msg.isNotBlank()) msg else raw
+            } catch (_: Exception) {
+                raw
+            }
+        } else {
+            raw
+        }
+    }
+
     return when (this) {
         ErrorType.UNAUTHORIZED -> "کلید API فعلی معتبر نیست. لطفاً API Key جدید را وارد کنید."
         ErrorType.ACCOUNT_DISABLED -> "حساب کاربری غیرفعال است."
@@ -30,8 +44,8 @@ fun ErrorType.toPersianMessage(fallbackMessage: String? = null): String {
         ErrorType.TIMEOUT -> "مهلت برقراری ارتباط با سرور به پایان رسید."
         ErrorType.CONFLICT -> "این پرداخت قبلاً ثبت یا فاکتور تسویه شده است."
         ErrorType.SERVER_ERROR -> "خطای داخلی سرور رخ داده است."
-        ErrorType.VALIDATION_ERROR -> fallbackMessage ?: "اطلاعات ارسالی معتبر نمی‌باشد."
-        ErrorType.NOT_FOUND -> fallbackMessage ?: "موردی یافت نشد."
-        ErrorType.UNKNOWN -> fallbackMessage ?: "خطای ناشناخته در ارتباط با درگاه."
+        ErrorType.VALIDATION_ERROR -> cleanFallback ?: "اطلاعات ارسالی معتبر نمی‌باشد."
+        ErrorType.NOT_FOUND -> cleanFallback ?: "موردی یافت نشد."
+        ErrorType.UNKNOWN -> cleanFallback ?: "خطای ناشناخته در ارتباط با درگاه."
     }
 }

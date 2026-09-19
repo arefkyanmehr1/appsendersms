@@ -1,5 +1,8 @@
 package com.example.ui.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -22,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.ExpandLess
@@ -30,12 +34,19 @@ import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -303,49 +315,251 @@ fun DocumentationSection(
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                                 thickness = 1.dp
                             )
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
 
-                            item.stepsOrPoints.forEach { point ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.Top
-                                ) {
-                                    Box(
+                            if (item.id == "play_protect") {
+                                // Rich Security UI for Play Protect Warning
+                                PlayProtectDetailedGuide()
+                            } else {
+                                item.stepsOrPoints.forEach { point ->
+                                    Row(
                                         modifier = Modifier
-                                            .padding(top = 6.dp)
-                                            .size(6.dp)
-                                            .background(item.iconTint, CircleShape)
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = point,
-                                        style = MaterialTheme.typography.bodySmall.copy(lineHeight = 22.sp),
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(top = 6.dp)
+                                                .size(6.dp)
+                                                .background(item.iconTint, CircleShape)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = point,
+                                            style = MaterialTheme.typography.bodySmall.copy(lineHeight = 22.sp),
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
                                 }
-                            }
 
-                            if (item.tips != null) {
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Surface(
-                                    color = item.iconBg.copy(alpha = 0.35f),
-                                    shape = RoundedCornerShape(10.dp),
-                                    border = BorderStroke(1.dp, item.iconTint.copy(alpha = 0.25f)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = item.tips,
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                                        color = item.iconTint,
-                                        modifier = Modifier.padding(10.dp)
-                                    )
+                                if (item.tips != null) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Surface(
+                                        color = item.iconBg.copy(alpha = 0.35f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = BorderStroke(1.dp, item.iconTint.copy(alpha = 0.25f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = item.tips,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                                            color = item.iconTint,
+                                            modifier = Modifier.padding(10.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun PlayProtectDetailedGuide() {
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Warning Banner Box (Soft Amber Alert)
+        Surface(
+            color = Color(0xFFFFFBEB),
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(Color(0xFFFEF3C7), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.WarningAmber,
+                        contentDescription = null,
+                        tint = Color(0xFFD97706),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "علت اخطار سپر ایمنی گوگل (Play Protect):",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF92400E)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "گوگل پلی برای تمام اپلیکیشن‌های ویژه پذیرندگان پرداخت که مستقیماً خارج از پلی‌استور نصب شده و جهت ثبت خودکار تراکنش‌ها به مجوز خواندن SMS نیاز دارند، هشدار عمومی نمایش می‌دهد. این برنامه کاملاً امن و اختصاصی است.",
+                        style = MaterialTheme.typography.bodySmall.copy(lineHeight = 20.sp),
+                        color = Color(0xFF78350F)
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = "مراحل گام‌به‌گام رفع اخطار و نصب موفق:",
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+
+        // Step 1 Card
+        StepGuideCard(
+            stepNumber = "۱",
+            stepTitle = "لمس گزینه «جزئیات بیشتر» (More details)",
+            stepDesc = "هنگام مشاهده پنجره قرمز/نارنجی اخطار Play Protect، دکمه OK را نزنید؛ روی فلش یا متن «جزئیات بیشتر» کلیک کنید تا گزینه‌های پنهان شده نمایش داده شوند."
+        )
+
+        // Step 2 Card
+        StepGuideCard(
+            stepNumber = "۲",
+            stepTitle = "کلیک روی «به هر حال نصب شود» (Install anyway)",
+            stepDesc = "پس از باز شدن بخش جزئیات، روی لینک «به هر حال نصب شود» کلیک نمایید تا اندروید فرآیند نصب را به پایان برساند."
+        )
+
+        // Step 3 Card
+        StepGuideCard(
+            stepNumber = "۳",
+            stepTitle = "تایید دسترسی SMS در تنظیمات گوشی",
+            stepDesc = "برای اینکه پیامک‌های واریزی بلافاصله تطبیق و تایید شوند، به برنامه اجازه خواندن پیامک‌ها را در مدیریت مجوزها بدهید."
+        )
+
+        // Security Assurance Box (Green Emerald Verified)
+        Surface(
+            color = Color(0xFFECFDF5),
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(Color(0xFFD1FAE5), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = null,
+                        tint = Color(0xFF059669),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "تضمین امنیت و حریم خصوصی:",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF065F46)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "تمامی کلیدها در ماژول امنیتی سخت‌افزاری دستگاه (Hardware KeyStore) با استاندارد AES-256 رمزگذاری شده‌اند. پیامک‌های شخصی هرگز ذخیره یا خارج از گوشی ارسال نمی‌شوند.",
+                        style = MaterialTheme.typography.bodySmall.copy(lineHeight = 20.sp),
+                        color = Color(0xFF047857)
+                    )
+                }
+            }
+        }
+
+        // Action Button: Directly open App Info Settings
+        OutlinedButton(
+            onClick = {
+                try {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", context.packageName, null)
+                    }
+                    context.startActivity(intent)
+                } catch (_: Exception) {}
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.primary
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "مدیریت مجوزها در تنظیمات گوشی (App Info)",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StepGuideCard(
+    stepNumber: String,
+    stepTitle: String,
+    stepDesc: String
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = stepNumber,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stepTitle,
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = stepDesc,
+                    style = MaterialTheme.typography.labelSmall.copy(lineHeight = 18.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

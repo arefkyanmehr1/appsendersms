@@ -45,7 +45,8 @@ data class InvoicesUiState(
     val invoices: List<PendingInvoice> = emptyList(),
     val errorMessage: String? = null,
     val successMessage: String? = null,
-    val rejectingOrderIds: Set<String> = emptySet()
+    val rejectingOrderIds: Set<String> = emptySet(),
+    val verifyingOrderIds: Set<String> = emptySet()
 )
 
 data class TransactionsUiState(
@@ -169,6 +170,52 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
                 clearInvoiceMessages()
             }
             repository.getPendingInvoices(limit = 50)
+        }
+    }
+
+    fun verifyInvoiceManually(
+        orderId: String,
+        amount: Long,
+        trackingCode: String? = null,
+        cardLast4: String? = null
+    ) {
+        viewModelScope.launch {
+            // Optimistic update: mark as verifying and remove from pending list immediately
+            _invoicesState.value = _invoicesState.value.copy(
+                verifyingOrderIds = _invoicesState.value.verifyingOrderIds + orderId,
+                invoices = _invoicesState.value.invoices.filter { it.orderId != orderId }
+            )
+
+            when (val result = repository.verifyInvoiceManually(orderId, amount, trackingCode, cardLast4)) {
+                is NetworkResult.Success -> {
+                    _invoicesState.value = _invoicesState.value.copy(
+                        verifyingOrderIds = _invoicesState.value.verifyingOrderIds - orderId,
+                        successMessage = "سفارش $orderId با موفقیت تأیید شد و وب‌هوک تحویل سرویس برای ربات ارسال گردید.",
+                        errorMessage = null
+                    )
+                    refreshDashboard()
+                    refreshTransactions(1)
+                }
+                is NetworkResult.Error -> {
+                    _invoicesState.value = _invoicesState.value.copy(
+                        verifyingOrderIds = _invoicesState.value.verifyingOrderIds - orderId,
+                        errorMessage = "خطا در تأیید دستی: ${result.errorType.toPersianMessage(result.message)}"
+                    )
+                    repository.getPendingInvoices(limit = 50)
+                }
+                is NetworkResult.Exception -> {
+                    _invoicesState.value = _invoicesState.value.copy(
+                        verifyingOrderIds = _invoicesState.value.verifyingOrderIds - orderId,
+                        errorMessage = "عدم برقراری ارتباط با سرور جهت تأیید دستی."
+                    )
+                    repository.getPendingInvoices(limit = 50)
+                }
+            }
+
+            launch {
+                delay(5000)
+                clearInvoiceMessages()
+            }
         }
     }
 
@@ -339,10 +386,12 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun refreshAll() {
-        refreshDashboard()
-        refreshPendingInvoices()
-        refreshTransactions(1)
-        sendHeartbeatNow()
+        viewModelScope.launch {
+            launch { refreshDashboard() }
+            launch { refreshPendingInvoices() }
+            launch { refreshTransactions(1) }
+            launch { sendHeartbeatNow() }
+        }
     }
 
     fun refreshDashboard() {
@@ -452,6 +501,36 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }
             }
+        }
+    }
+
+    fun resetRevenueStats(onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val success = repository.resetRevenueStats()
+            if (success) {
+                // Update local dashboard state
+                val currentData = _dashboardState.value.data
+                if (currentData != null) {
+                    val updatedTx = currentData.transactions?.copy(
+                        verifiedCount = 0,
+                        verifiedAmount = 0L
+                    ) ?: com.example.data.model.TransactionSummary(verifiedCount = 0, verifiedAmount = 0L)
+                    _dashboardState.value = _dashboardState.value.copy(
+                        data = currentData.copy(transactions = updatedTx)
+                    )
+                }
+            }
+            onResult(success)
+        }
+    }
+
+    fun clearAllArchives(onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val success = repository.clearAllArchives()
+            if (success) {
+                refreshPendingInvoices()
+            }
+            onResult(success)
         }
     }
 

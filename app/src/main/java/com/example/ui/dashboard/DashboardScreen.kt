@@ -36,20 +36,26 @@ import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -105,6 +111,10 @@ fun DashboardScreen(
             }
         )
     }
+
+    var showResetRevenueDialog by remember { mutableStateOf(false) }
+    var showClearArchivesDialog by remember { mutableStateOf(false) }
+    var actionFeedbackMessage by remember { mutableStateOf<String?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -423,16 +433,16 @@ fun DashboardScreen(
                         containerColor = MaterialTheme.colorScheme.surface
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.20f))
                 ) {
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                Brush.horizontalGradient(
+                                Brush.verticalGradient(
                                     colors = listOf(
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.02f)
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                                        MaterialTheme.colorScheme.surface
                                     )
                                 )
                             )
@@ -468,7 +478,7 @@ fun DashboardScreen(
                                 ) {
                                     Text(
                                         text = "معادل ${CurrencyUtils.formatTomans(verifiedAmount)}",
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.primary
                                     )
@@ -492,7 +502,144 @@ fun DashboardScreen(
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                            thickness = 1.dp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Controls: Reset Revenue & Clear Archives
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            FilledTonalButton(
+                                onClick = { showResetRevenueDialog = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.RestartAlt,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "ریست درآمد",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
+
+                            FilledTonalButton(
+                                onClick = { showClearArchivesDialog = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteSweep,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "پاکسازی بایگانی",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
+                        }
+
+                        if (actionFeedbackMessage != null) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                color = Color(0xFFD1FAE5),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = actionFeedbackMessage ?: "",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFF065F46),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
                     }
+                }
+
+                if (showResetRevenueDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showResetRevenueDialog = false },
+                        title = {
+                            Text(
+                                text = "صفر کردن آمار درآمد؟",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = "آیا مطمئن هستید که می‌خواهید آمار مبالغ تأیید شده را صفر کنید؟ این کار برای شروع شیفت یا دوره محاسباتی جدید مناسب است و اطلاعات اصلی درگاه روی سرور محفوظ می‌ماند.",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showResetRevenueDialog = false
+                                    viewModel.resetRevenueStats { success ->
+                                        actionFeedbackMessage = if (success) "آمار درآمد با موفقیت صفر شد." else "خطا در ریست درآمد."
+                                    }
+                                }
+                            ) {
+                                Text("بله، صفر شود")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showResetRevenueDialog = false }) {
+                                Text("انصراف")
+                            }
+                        }
+                    )
+                }
+
+                if (showClearArchivesDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showClearArchivesDialog = false },
+                        title = {
+                            Text(
+                                text = "پاکسازی بایگانی‌ها و کش؟",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = "تمام لاگ پیامک‌های پردازش‌شده محلی، کش سفارش‌های رد شده و حافظه موقت پاکسازی می‌شوند تا سرعت پردازش سفارش‌های جدید به حداکثر برسد. آیا ادامه می‌دهید؟",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showClearArchivesDialog = false
+                                    viewModel.clearAllArchives { success ->
+                                        actionFeedbackMessage = if (success) "بایگانی‌ها و حافظه موقت پاکسازی شدند." else "خطا در پاکسازی بایگانی‌ها."
+                                    }
+                                }
+                            ) {
+                                Text("بله، پاکسازی کن")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showClearArchivesDialog = false }) {
+                                Text("انصراف")
+                            }
+                        }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(22.dp))

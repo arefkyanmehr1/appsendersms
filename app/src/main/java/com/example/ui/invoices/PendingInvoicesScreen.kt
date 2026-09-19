@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
@@ -307,16 +309,20 @@ fun PendingInvoicesScreen(
                                 )
                             }
 
-                            items(
+                            itemsIndexed(
                                 items = invoicesState.invoices,
-                                key = { it.orderId }
-                            ) { invoice ->
+                                key = { index, item -> "${item.orderId}_${item.id}_$index" }
+                            ) { _, invoice ->
                                 PendingInvoiceCard(
                                     invoice = invoice,
                                     configuredTimeout = invoiceTimeoutMinutes,
                                     isRejecting = invoicesState.rejectingOrderIds.contains(invoice.orderId),
+                                    isVerifying = invoicesState.verifyingOrderIds.contains(invoice.orderId),
                                     onReject = { orderId, reason ->
                                         viewModel.rejectInvoice(orderId, reason)
+                                    },
+                                    onVerifyManually = { orderId, amount, trackingCode, cardLast4 ->
+                                        viewModel.verifyInvoiceManually(orderId, amount, trackingCode, cardLast4)
                                     }
                                 )
                             }
@@ -333,8 +339,10 @@ fun PendingInvoiceCard(
     invoice: PendingInvoice,
     configuredTimeout: Int,
     onReject: (String, String) -> Unit,
+    onVerifyManually: (String, Long, String?, String?) -> Unit,
     modifier: Modifier = Modifier,
-    isRejecting: Boolean = false
+    isRejecting: Boolean = false,
+    isVerifying: Boolean = false
 ) {
     val initialSafeSeconds = remember(invoice.orderId, invoice.remainingSeconds, configuredTimeout) {
         InvoiceCountdownHelper.calculateSafeRemainingSeconds(invoice, configuredTimeout)
@@ -344,6 +352,7 @@ fun PendingInvoiceCard(
         mutableStateOf(initialSafeSeconds)
     }
     var showRejectDialog by remember { mutableStateOf(false) }
+    var showManualVerifyDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(key1 = invoice.orderId, key2 = initialSafeSeconds) {
         secondsLeft = initialSafeSeconds
@@ -354,6 +363,17 @@ fun PendingInvoiceCard(
     }
 
     val isExpired = secondsLeft <= 0
+
+    if (showManualVerifyDialog) {
+        ManualVerifyDialog(
+            invoice = invoice,
+            onDismiss = { showManualVerifyDialog = false },
+            onConfirmVerify = { trackingCode, cardLast4 ->
+                showManualVerifyDialog = false
+                onVerifyManually(invoice.orderId, invoice.effectiveAmount, trackingCode, cardLast4)
+            }
+        )
+    }
 
     if (showRejectDialog) {
         RejectInvoiceDialog(
@@ -412,7 +432,7 @@ fun PendingInvoiceCard(
                         )
                         if (!invoice.createdAt.isNullOrBlank()) {
                             Text(
-                                text = "ثبت: ${invoice.createdAt}",
+                                text = "ثبت: ${com.example.core.util.PersianDateUtils.formatToPersianDateTime(invoice.createdAt)}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline,
                                 maxLines = 1,
@@ -634,15 +654,15 @@ fun PendingInvoiceCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Action Row: Reject / Cancel Button
+            // Action Row: Manual Verify & Reject / Cancel Buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedButton(
                     onClick = { showRejectDialog = true },
-                    enabled = !isRejecting,
+                    enabled = !isRejecting && !isVerifying,
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
                     ),
@@ -670,7 +690,43 @@ fun PendingInvoiceCard(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "رد و لغو سفارش",
+                            text = "رد و لغو",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = { showManualVerifyDialog = true },
+                    enabled = !isVerifying && !isRejecting,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF2E7D32),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("manual_verify_invoice_${invoice.orderId}")
+                ) {
+                    if (isVerifying) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "در حال تأیید...",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "تأیید دستی",
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
                         )
                     }
@@ -805,6 +861,143 @@ fun RejectInvoiceDialog(
                 modifier = Modifier.testTag("confirm_reject_button_${invoice.orderId}")
             ) {
                 Text("رد و لغو سفارش", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("انصراف")
+            }
+        }
+    )
+}
+
+@Composable
+fun ManualVerifyDialog(
+    invoice: PendingInvoice,
+    onDismiss: () -> Unit,
+    onConfirmVerify: (trackingCode: String?, cardLast4: String?) -> Unit
+) {
+    var trackingCode by remember { mutableStateOf("") }
+    var cardLast4 by remember { mutableStateOf("") }
+
+    val cleanCardDigits = remember(cardLast4) {
+        CurrencyUtils.normalizePersianArabicDigits(cardLast4).filter { it.isDigit() }
+    }
+    val isCardValid = cleanCardDigits.isEmpty() || cleanCardDigits.length == 4
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = Color(0xFF2E7D32),
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "تأیید دستی پرداخت",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                textAlign = TextAlign.Center
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "آیا واریز این سفارش را تأیید می‌کنید؟ به محض تأیید دستی، وب‌هوک تحویل سرویس به ربات تلگرام ارسال و کانفیگ برای مشتری صادر می‌شود.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "شناسه سفارش: ${invoice.orderId}",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "مبلغ فاکتور: ${CurrencyUtils.formatRials(invoice.effectiveAmount)}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF2E7D32)
+                        )
+                        Text(
+                            text = "معادل: ${CurrencyUtils.formatTomans(invoice.effectiveAmount)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (!invoice.customerName.isNullOrBlank()) {
+                            Text(
+                                text = "نام خریدار: ${invoice.customerName}",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = trackingCode,
+                    onValueChange = { trackingCode = it },
+                    label = { Text("شماره پیگیری فیش (اختیاری)") },
+                    placeholder = { Text("مثلاً شماره ارجاع یا فیش...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodySmall
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = cardLast4,
+                    onValueChange = { input ->
+                        val digits = CurrencyUtils.normalizePersianArabicDigits(input).filter { it.isDigit() }
+                        if (digits.length <= 4) {
+                            cardLast4 = digits
+                        }
+                    },
+                    label = { Text("۴ رقم آخر کارت پرداخت‌کننده (اختیاری)") },
+                    placeholder = { Text("مثلاً 5022") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    ),
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    isError = !isCardValid,
+                    supportingText = {
+                        if (!isCardValid) {
+                            Text(
+                                text = "چهار رقم آخر کارت باید دقیقاً ۴ رقم باشد یا خالی بماند",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val cleanTracking = if (trackingCode.isNotBlank()) trackingCode.trim() else null
+                    val cleanCard = if (cleanCardDigits.length == 4) cleanCardDigits else null
+                    onConfirmVerify(cleanTracking, cleanCard)
+                },
+                enabled = isCardValid,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF2E7D32)
+                ),
+                modifier = Modifier.testTag("confirm_manual_verify_${invoice.orderId}")
+            ) {
+                Text("تأیید و تحویل سرویس", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {

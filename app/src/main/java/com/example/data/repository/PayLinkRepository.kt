@@ -6,6 +6,7 @@ import com.example.core.network.ErrorType
 import com.example.core.network.NetworkResult
 import com.example.core.security.SecureApiKeyStorage
 import com.example.core.util.AppLogger
+import com.example.core.util.CurrencyUtils
 import com.example.core.util.DeviceUtils
 import com.example.data.api.ApiClient
 import com.example.data.api.PayLinkApi
@@ -240,6 +241,18 @@ class PayLinkRepository(
                         reason = reason
                     )
                 )
+                // Also store in processed_payments with REJECTED status so it's tracked in transaction history
+                database.processedPaymentDao().insert(
+                    com.example.data.local.entity.ProcessedPaymentEntity(
+                        smsHash = "rejected_$orderId",
+                        amount = 0L,
+                        orderId = orderId,
+                        bankName = "رد شده توسط پذیرنده",
+                        status = "REJECTED",
+                        receivedAt = System.currentTimeMillis(),
+                        errorMessage = reason
+                    )
+                )
                 database.cachedInvoiceDao().deleteByOrderId(orderId)
             } catch (e: Exception) {
                 AppLogger.e("Error marking invoice as rejected locally", e)
@@ -312,22 +325,176 @@ class PayLinkRepository(
         }
     }
 
+    suspend fun verifyInvoiceManually(
+        orderId: String,
+        amount: Long,
+        trackingCode: String? = null,
+        cardLast4: String? = null
+    ): NetworkResult<VerifyPaymentData> = withContext(Dispatchers.IO) {
+        val safeTracking = if (!trackingCode.isNullOrBlank()) {
+            CurrencyUtils.normalizePersianArabicDigits(trackingCode.trim())
+        } else {
+            "MANUAL-${System.currentTimeMillis().toString().takeLast(6)}"
+        }
+
+        val cleanCard = cardLast4?.let { CurrencyUtils.normalizePersianArabicDigits(it.trim()) }
+            ?.filter { it.isDigit() }
+            ?.takeIf { it.length == 4 }
+            ?: "0000"
+
+        val request = VerifyPaymentRequest(
+            orderId = orderId,
+            amount = amount,
+            bankName = "تأیید دستی پذیرنده",
+            trackingCode = safeTracking,
+            cardLast4 = cleanCard,
+            rawSmsHash = com.example.core.security.HashUtils.sha256Hex("manual_${orderId}_${System.currentTimeMillis()}")
+        )
+
+        // Remove from local pending cache immediately for snappy UI
+        try {
+            database.cachedInvoiceDao().deleteByOrderId(orderId)
+        } catch (_: Exception) {}
+
+        val result = verifyPayment(request)
+
+        // Record in processed payments table
+        try {
+            database.processedPaymentDao().insert(
+                ProcessedPaymentEntity(
+                    smsHash = request.rawSmsHash,
+                    amount = amount,
+                    orderId = orderId,
+                    trackingCode = safeTracking,
+                    bankName = "تأیید دستی پذیرنده",
+                    cardLast4 = cleanCard,
+                    status = "VERIFIED",
+                    receivedAt = System.currentTimeMillis(),
+                    verifiedAt = System.currentTimeMillis()
+                )
+            )
+        } catch (e: Exception) {
+            AppLogger.e("Error recording manual payment locally", e)
+        }
+
+        result
+    }
+
     suspend fun getTransactionHistory(
         page: Int = 1,
         limit: Int = 20
     ): NetworkResult<TransactionHistoryData> = withContext(Dispatchers.IO) {
-        if (!DeviceUtils.isNetworkAvailable(context)) {
-            return@withContext NetworkResult.Error(0, "عدم اتصال به اینترنت", ErrorType.NO_INTERNET)
+        // 1. Read local processed transactions (manual verifications, matched payments, etc.)
+        val localEntities: List<com.example.data.local.entity.ProcessedPaymentEntity> = try {
+            database.processedPaymentDao().getAllList()
+        } catch (e: Exception) {
+            emptyList()
         }
+
+        // 2. Read local rejected invoices so they definitely show up in transactions history
+        val rejectedEntities: List<com.example.data.local.entity.RejectedInvoiceEntity> = try {
+            database.rejectedInvoiceDao().getAllRejected()
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        val localItems: MutableList<com.example.data.model.TransactionItem> = mutableListOf()
+
+        for (entity in localEntities) {
+            val cleanStatus = when (entity.status.uppercase()) {
+                "VERIFIED" -> "verified"
+                "REJECTED" -> "rejected"
+                "FAILED" -> "failed"
+                "CANCELLED" -> "cancelled"
+                "EXPIRED" -> "expired"
+                else -> entity.status.lowercase()
+            }
+            val timeMillis = entity.verifiedAt ?: entity.receivedAt
+            localItems.add(
+                com.example.data.model.TransactionItem(
+                    id = entity.id,
+                    orderId = entity.orderId,
+                    amount = entity.amount,
+                    bankName = entity.bankName,
+                    trackingCode = entity.trackingCode,
+                    cardLast4 = entity.cardLast4,
+                    status = cleanStatus,
+                    rawSmsHash = entity.smsHash,
+                    receivedAt = com.example.core.util.PersianDateUtils.formatToPersianDateTime(timeMillis)
+                )
+            )
+        }
+
+        val knownLocalOrders = localItems.mapNotNull { it.orderId }.toSet()
+        var offsetCounter = 1L
+        for (rejected in rejectedEntities) {
+            if (!knownLocalOrders.contains(rejected.orderId)) {
+                val uniqueId = Math.abs(rejected.orderId.hashCode().toLong()) * 1000L + (offsetCounter++)
+                localItems.add(
+                    com.example.data.model.TransactionItem(
+                        id = uniqueId,
+                        orderId = rejected.orderId,
+                        amount = 0L,
+                        bankName = null,
+                        trackingCode = null,
+                        cardLast4 = null,
+                        status = "rejected",
+                        rawSmsHash = null,
+                        receivedAt = com.example.core.util.PersianDateUtils.formatToPersianDateTime(rejected.rejectedAt)
+                    )
+                )
+            }
+        }
+
+        if (!DeviceUtils.isNetworkAvailable(context)) {
+            val paged = localItems.drop((page - 1) * limit).take(limit)
+            return@withContext NetworkResult.Success(
+                TransactionHistoryData(page = page, limit = limit, total = localItems.size, transactions = paged)
+            )
+        }
+
         try {
             val response = api.getTransactionHistory(page, limit)
             handleResponse(response) { body ->
-                val data = body.data ?: TransactionHistoryData(page = page, limit = limit, total = 0)
-                NetworkResult.Success(data)
+                val serverData = body.data ?: TransactionHistoryData(page = page, limit = limit, total = 0)
+                val serverList = serverData.transactions
+
+                // Merge server transactions with any local rejected or manual transactions not present on server
+                val knownOrderIds = serverList.mapNotNull { it.orderId }.toSet()
+                val additionalLocal = localItems.filter { it.orderId != null && !knownOrderIds.contains(it.orderId) }
+
+                val seenOrderIds = mutableSetOf<String>()
+                val mergedList = mutableListOf<com.example.data.model.TransactionItem>()
+                for (item in (serverList + additionalLocal)) {
+                    val oid = item.orderId
+                    if (!oid.isNullOrBlank()) {
+                        if (seenOrderIds.add(oid)) {
+                            mergedList.add(item)
+                        }
+                    } else {
+                        mergedList.add(item)
+                    }
+                }
+                mergedList.sortByDescending { it.id }
+                val totalCount = maxOf(serverData.total, mergedList.size)
+
+                NetworkResult.Success(
+                    serverData.copy(
+                        total = totalCount,
+                        transactions = mergedList
+                    )
+                )
             }
         } catch (e: Exception) {
-            AppLogger.e("Failed to get transaction history", e)
-            mapException(e)
+            AppLogger.e("Failed to get transaction history from server, falling back to local records", e)
+            if (localItems.isNotEmpty()) {
+                val paged = localItems.drop((page - 1) * limit).take(limit)
+                NetworkResult.Success(
+                    TransactionHistoryData(page = page, limit = limit, total = localItems.size, transactions = paged)
+                )
+            } else {
+                mapException(e)
+            }
         }
     }
 
@@ -361,6 +528,31 @@ class PayLinkRepository(
         errorMessage: String? = null
     ) = withContext(Dispatchers.IO) {
         database.processedPaymentDao().updateStatus(id, status, verifiedAt, errorMessage)
+    }
+
+    suspend fun clearAllArchives(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            database.processedPaymentDao().deleteAll()
+            database.rejectedInvoiceDao().clearAll()
+            com.example.sms.SmsProcessingCoordinator.clearSettledMemory()
+            AppLogger.i("Archives and local processed histories cleared successfully.")
+            true
+        } catch (e: Exception) {
+            AppLogger.e("Failed to clear archives", e)
+            false
+        }
+    }
+
+    suspend fun resetRevenueStats(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            database.processedPaymentDao().deleteAll()
+            com.example.sms.SmsProcessingCoordinator.clearSettledMemory()
+            AppLogger.i("Revenue stats reset locally.")
+            true
+        } catch (e: Exception) {
+            AppLogger.e("Failed to reset revenue stats", e)
+            false
+        }
     }
 
     suspend fun disconnect() = withContext(Dispatchers.IO) {
@@ -400,8 +592,24 @@ class PayLinkRepository(
             else -> ErrorType.UNKNOWN
         }
 
-        val errMsg = response.errorBody()?.string() ?: "خطای سرور: $code"
+        val rawBody = response.errorBody()?.string()
+        val errMsg = extractCleanErrorMessage(rawBody, code)
         return NetworkResult.Error(code, errMsg, errType)
+    }
+
+    private fun extractCleanErrorMessage(rawError: String?, code: Int): String {
+        if (rawError.isNullOrBlank()) return "خطای سرور: $code"
+        return try {
+            val jsonObject = org.json.JSONObject(rawError)
+            if (jsonObject.has("message")) {
+                val msg = jsonObject.optString("message", "")
+                if (msg.isNotBlank()) msg else rawError
+            } else {
+                rawError
+            }
+        } catch (_: Exception) {
+            rawError
+        }
     }
 
     private fun <T> mapException(e: Exception): NetworkResult<T> {

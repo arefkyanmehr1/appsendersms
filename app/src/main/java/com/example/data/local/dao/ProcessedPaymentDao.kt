@@ -23,6 +23,9 @@ interface ProcessedPaymentDao {
     suspend fun updateStatus(id: Long, status: String, verifiedAt: Long?, errorMessage: String?)
 
     @Query("SELECT * FROM processed_payments ORDER BY receivedAt DESC LIMIT 100")
+    suspend fun getAllList(): List<ProcessedPaymentEntity>
+
+    @Query("SELECT * FROM processed_payments ORDER BY receivedAt DESC LIMIT 100")
     fun getAllFlow(): Flow<List<ProcessedPaymentEntity>>
 
     @Query("DELETE FROM processed_payments")

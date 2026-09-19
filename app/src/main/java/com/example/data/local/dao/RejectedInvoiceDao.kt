@@ -15,9 +15,15 @@ interface RejectedInvoiceDao {
     @Query("SELECT orderId FROM rejected_invoices")
     suspend fun getAllRejectedOrderIds(): List<String>
 
+    @Query("SELECT * FROM rejected_invoices ORDER BY rejectedAt DESC")
+    suspend fun getAllRejected(): List<RejectedInvoiceEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun markRejected(entity: RejectedInvoiceEntity)
 
     @Query("DELETE FROM rejected_invoices WHERE rejectedAt < :cutoffTimestamp")
     suspend fun cleanupOld(cutoffTimestamp: Long)
+
+    @Query("DELETE FROM rejected_invoices")
+    suspend fun clearAll()
 }

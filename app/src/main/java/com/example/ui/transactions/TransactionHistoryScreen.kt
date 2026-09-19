@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,10 +30,14 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +51,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -58,6 +66,10 @@ import com.example.core.util.CurrencyUtils
 import com.example.data.model.TransactionItem
 import com.example.ui.viewmodel.PayLinkViewModel
 
+enum class TransactionFilter {
+    ALL, VERIFIED, REJECTED
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionHistoryScreen(
@@ -67,9 +79,29 @@ fun TransactionHistoryScreen(
 ) {
     val state by viewModel.transactionsState.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
+    var selectedFilter by remember { mutableStateOf(TransactionFilter.ALL) }
 
     LaunchedEffect(Unit) {
         viewModel.refreshTransactions(1)
+    }
+
+    val verifiedCount = remember(state.transactions) {
+        state.transactions.count { it.safeStatus in listOf("verified", "paid", "success") }
+    }
+    val rejectedCount = remember(state.transactions) {
+        state.transactions.count { it.safeStatus in listOf("rejected", "failed", "cancelled", "expired") }
+    }
+
+    val filteredTransactions = remember(state.transactions, selectedFilter) {
+        when (selectedFilter) {
+            TransactionFilter.ALL -> state.transactions
+            TransactionFilter.VERIFIED -> state.transactions.filter {
+                it.safeStatus in listOf("verified", "paid", "success")
+            }
+            TransactionFilter.REJECTED -> state.transactions.filter {
+                it.safeStatus in listOf("rejected", "failed", "cancelled", "expired")
+            }
+        }
     }
 
     Scaffold(
@@ -145,6 +177,53 @@ fun TransactionHistoryScreen(
                         }
                     }
 
+                    state.transactions.isEmpty() && state.errorMessage != null -> {
+                        Column(
+                            modifier = Modifier
+                                .widthIn(max = 480.dp)
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Cancel,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "خطا در بارگذاری تراکنش‌ها",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = state.errorMessage ?: "خطای ناشناخته در اتصال به سرور",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            OutlinedButton(
+                                onClick = { viewModel.refreshTransactions(1) },
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("تلاش مجدد")
+                            }
+                        }
+                    }
+
                     state.transactions.isEmpty() -> {
                         Column(
                             modifier = Modifier
@@ -190,6 +269,75 @@ fun TransactionHistoryScreen(
                                 .padding(horizontal = 18.dp, vertical = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
+                            // Filter Chips Row: All, Verified, Rejected
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    FilterChip(
+                                        selected = selectedFilter == TransactionFilter.ALL,
+                                        onClick = { selectedFilter = TransactionFilter.ALL },
+                                        label = {
+                                            Text(
+                                                text = "همه (${state.transactions.size})",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                            )
+                                        },
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+
+                                    FilterChip(
+                                        selected = selectedFilter == TransactionFilter.VERIFIED,
+                                        onClick = { selectedFilter = TransactionFilter.VERIFIED },
+                                        label = {
+                                            Text(
+                                                text = "تأیید شده ($verifiedCount)",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = Color(0xFF10B981),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Color(0xFF10B981).copy(alpha = 0.15f),
+                                            selectedLabelColor = Color(0xFF10B981)
+                                        ),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+
+                                    FilterChip(
+                                        selected = selectedFilter == TransactionFilter.REJECTED,
+                                        onClick = { selectedFilter = TransactionFilter.REJECTED },
+                                        label = {
+                                            Text(
+                                                text = "لغو شده ($rejectedCount)",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Cancel,
+                                                contentDescription = null,
+                                                tint = Color(0xFFDC2626),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Color(0xFFDC2626).copy(alpha = 0.15f),
+                                            selectedLabelColor = Color(0xFFDC2626)
+                                        ),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                }
+                            }
+
                             item {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -197,7 +345,7 @@ fun TransactionHistoryScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "تراکنش‌های ثبت شده (${state.total} مورد)",
+                                        text = "نمایش ${filteredTransactions.size} مورد از ${state.total} تراکنش کل",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -209,11 +357,31 @@ fun TransactionHistoryScreen(
                                 }
                             }
 
-                            items(
-                                items = state.transactions,
-                                key = { it.id }
-                            ) { item ->
-                                TransactionCard(item = item)
+                            if (filteredTransactions.isEmpty()) {
+                                item {
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                        )
+                                    ) {
+                                        Text(
+                                            text = "تراکنشی با این وضعیت فیلتر یافت نشد.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.outline,
+                                            modifier = Modifier.padding(20.dp),
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                    }
+                                }
+                            } else {
+                                itemsIndexed(
+                                    items = filteredTransactions,
+                                    key = { index, item -> "${item.id}_${item.orderId ?: ""}_$index" }
+                                ) { _, item ->
+                                    TransactionCard(item = item)
+                                }
                             }
 
                             item {
@@ -272,6 +440,30 @@ fun TransactionCard(
     item: TransactionItem,
     modifier: Modifier = Modifier
 ) {
+    val statusLower = item.safeStatus
+    val isRejected = statusLower in listOf("rejected", "cancelled", "failed")
+    val isExpired = statusLower == "expired"
+    val isVerified = statusLower in listOf("verified", "paid", "success")
+
+    val badgeColor = when {
+        isRejected -> Color(0xFFDC2626)
+        isExpired -> Color(0xFFD97706)
+        else -> Color(0xFF10B981)
+    }
+
+    val badgeIcon = when {
+        isRejected -> Icons.Default.Cancel
+        isExpired -> Icons.Default.HourglassEmpty
+        else -> Icons.Default.CheckCircle
+    }
+
+    val badgeText = when {
+        isRejected -> "لغو شده"
+        isExpired -> "منقضی شده"
+        isVerified -> "تأیید شده"
+        else -> (item.status ?: "").ifBlank { "نامشخص" }
+    }
+
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -279,7 +471,11 @@ fun TransactionCard(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        border = BorderStroke(
+            1.dp,
+            if (isRejected) Color(0xFFDC2626).copy(alpha = 0.3f)
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -294,13 +490,13 @@ fun TransactionCard(
                     Box(
                         modifier = Modifier
                             .size(38.dp)
-                            .background(Color(0xFF10B981).copy(alpha = 0.15f), CircleShape),
+                            .background(badgeColor.copy(alpha = 0.15f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.CheckCircle,
+                            imageVector = badgeIcon,
                             contentDescription = null,
-                            tint = Color(0xFF10B981),
+                            tint = badgeColor,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -316,27 +512,27 @@ fun TransactionCard(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Beautiful, robust "تأیید شده" badge (theme-aware, never squashed)
+                // Robust Status badge (theme-aware, never squashed)
                 Surface(
-                    color = Color(0xFF10B981).copy(alpha = 0.15f),
+                    color = badgeColor.copy(alpha = 0.15f),
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f))
+                    border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.4f))
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.CheckCircle,
+                            imageVector = badgeIcon,
                             contentDescription = null,
-                            tint = Color(0xFF10B981),
+                            tint = badgeColor,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = if (item.status == "verified") "تأیید شده" else item.status,
+                            text = badgeText,
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = Color(0xFF10B981),
+                            color = badgeColor,
                             maxLines = 1,
                             softWrap = false
                         )
@@ -350,8 +546,13 @@ fun TransactionCard(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                color = if (isRejected) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                border = BorderStroke(
+                    1.dp,
+                    if (isRejected) MaterialTheme.colorScheme.error.copy(alpha = 0.2f)
+                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                )
             ) {
                 Column(
                     modifier = Modifier
@@ -359,7 +560,7 @@ fun TransactionCard(
                         .padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
                     Text(
-                        text = "مبلغ واریز شده:",
+                        text = if (isRejected) "مبلغ فاکتور لغو شده:" else "مبلغ واریز شده:",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -376,19 +577,22 @@ fun TransactionCard(
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 20.sp
                             ),
-                            color = MaterialTheme.colorScheme.primary
+                            color = if (isRejected) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.primary
                         )
 
                         // Toman underneath or alongside
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            color = if (isRejected) MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                         ) {
                             Text(
                                 text = "معادل ${CurrencyUtils.formatTomans(item.amount)}",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary
+                                color = if (isRejected) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -462,7 +666,7 @@ fun TransactionCard(
 
                     if (!item.receivedAt.isNullOrBlank()) {
                         Text(
-                            text = item.receivedAt,
+                            text = com.example.core.util.PersianDateUtils.formatToPersianDateTime(item.receivedAt),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline
                         )

@@ -136,10 +136,13 @@ object ApiClient {
                 }
             }
 
+            val connectionPool = okhttp3.ConnectionPool(10, 5, TimeUnit.MINUTES)
+
             val okHttpClient = OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(20, TimeUnit.SECONDS)
-                .writeTimeout(20, TimeUnit.SECONDS)
+                .connectionPool(connectionPool)
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(12, TimeUnit.SECONDS)
+                .writeTimeout(12, TimeUnit.SECONDS)
                 .retryOnConnectionFailure(true)
                 .addInterceptor(ApiKeyInterceptor(secureStorage))
                 .addInterceptor(logging)

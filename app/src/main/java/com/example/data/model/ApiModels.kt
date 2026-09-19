@@ -151,7 +151,9 @@ data class VerifyPaymentData(
     @Json(name = "transaction_id") val transactionId: Long? = null,
     @Json(name = "order_id") val orderId: String? = null,
     @Json(name = "amount") val amount: Long? = null,
-    @Json(name = "status") val status: String? = null
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "duplicate") val duplicate: Boolean? = null,
+    @Json(name = "verified") val verified: Boolean? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -172,14 +174,17 @@ data class TransactionHistoryData(
 
 @JsonClass(generateAdapter = true)
 data class TransactionItem(
-    @Json(name = "id") val id: Long,
-    @Json(name = "order_id") val orderId: String?,
-    @Json(name = "amount") val amount: Long,
+    @Json(name = "id") val id: Long = 0L,
+    @Json(name = "order_id") val orderId: String? = null,
+    @Json(name = "amount") val amount: Long = 0L,
     @Json(name = "commission_amount") val commissionAmount: Long? = null,
-    @Json(name = "bank_name") val bankName: String?,
-    @Json(name = "tracking_code") val trackingCode: String?,
-    @Json(name = "card_last4") val cardLast4: String?,
-    @Json(name = "status") val status: String,
-    @Json(name = "raw_sms_hash") val rawSmsHash: String?,
-    @Json(name = "received_at") val receivedAt: String?
-)
+    @Json(name = "bank_name") val bankName: String? = null,
+    @Json(name = "tracking_code") val trackingCode: String? = null,
+    @Json(name = "card_last4") val cardLast4: String? = null,
+    @Json(name = "status") val status: String? = "verified",
+    @Json(name = "raw_sms_hash") val rawSmsHash: String? = null,
+    @Json(name = "received_at") val receivedAt: String? = null
+) {
+    val safeStatus: String
+        get() = (status ?: "verified").trim().lowercase()
+}

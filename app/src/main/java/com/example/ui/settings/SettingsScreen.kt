@@ -30,8 +30,11 @@ import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.AlertDialog
@@ -39,6 +42,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -80,6 +84,9 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var showDisconnectDialog by remember { mutableStateOf(false) }
+    var showResetRevenueDialog by remember { mutableStateOf(false) }
+    var showClearArchivesDialog by remember { mutableStateOf(false) }
+    var actionFeedbackMessage by remember { mutableStateOf<String?>(null) }
     val isDarkMode by viewModel.isDarkMode.collectAsState()
     val isPendingNotifEnabled by viewModel.isPendingNotifEnabled.collectAsState()
     val isVerifiedNotifEnabled by viewModel.isVerifiedNotifEnabled.collectAsState()
@@ -87,6 +94,76 @@ fun SettingsScreen(
     val isNotifVibrationEnabled by viewModel.isNotifVibrationEnabled.collectAsState()
     val invoiceTimeoutMinutes by viewModel.invoiceTimeoutMinutes.collectAsState()
     val scrollState = rememberScrollState()
+
+    if (showResetRevenueDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetRevenueDialog = false },
+            title = {
+                Text(
+                    text = "صفر کردن آمار درآمد؟",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Text(
+                    text = "آیا از ریست آمار مبالغ تأیید شده مطمئن هستید؟ این تغییر تنها آمار محلی دستگاه را جهت شروع شیفت یا دوره جدید صفر می‌کند.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showResetRevenueDialog = false
+                        viewModel.resetRevenueStats { success ->
+                            actionFeedbackMessage = if (success) "آمار درآمد با موفقیت صفر شد." else "خطا در ریست درآمد."
+                        }
+                    }
+                ) {
+                    Text("بله، صفر شود")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetRevenueDialog = false }) {
+                    Text("انصراف")
+                }
+            }
+        )
+    }
+
+    if (showClearArchivesDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearArchivesDialog = false },
+            title = {
+                Text(
+                    text = "پاکسازی بایگانی‌ها و حافظه موقت؟",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Text(
+                    text = "آیا می‌خواهید تمام تاریخچه پیامک‌های پردازش‌شده محلی، کش فاکتورهای رد شده و حافظه موقت را پاکسازی کنید؟",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearArchivesDialog = false
+                        viewModel.clearAllArchives { success ->
+                            actionFeedbackMessage = if (success) "بایگانی‌ها و حافظه موقت پاکسازی شدند." else "خطا در پاکسازی بایگانی‌ها."
+                        }
+                    }
+                ) {
+                    Text("بله، پاکسازی کن")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearArchivesDialog = false }) {
+                    Text("انصراف")
+                }
+            }
+        )
+    }
 
     if (showDisconnectDialog) {
         AlertDialog(
@@ -697,6 +774,86 @@ fun SettingsScreen(
 
                     // Section: Documentation & Help Center
                     DocumentationSection()
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Section: Data and Archive Management
+                    Text(
+                        text = "مدیریت داده‌ها و بایگانی",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "ابزارهای نگهداری، سبک‌سازی پایگاه داده و شروع دوره‌های مالی جدید:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                FilledTonalButton(
+                                    onClick = { showResetRevenueDialog = true },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.RestartAlt,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("صفر کردن درآمد", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                                }
+
+                                FilledTonalButton(
+                                    onClick = { showClearArchivesDialog = true },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DeleteSweep,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("پاکسازی بایگانی‌ها", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                                }
+                            }
+
+                            if (actionFeedbackMessage != null) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Surface(
+                                    color = Color(0xFFD1FAE5),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = actionFeedbackMessage ?: "",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = Color(0xFF065F46),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(14.dp))
 

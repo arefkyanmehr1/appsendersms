@@ -410,10 +410,5 @@ fun ActivityLogCard(
 }
 
 private fun formatDate(timestamp: Long): String {
-    return try {
-        val sdf = SimpleDateFormat("yyyy/MM/dd - HH:mm:ss", Locale.getDefault())
-        sdf.format(Date(timestamp))
-    } catch (e: Exception) {
-        ""
-    }
+    return com.example.core.util.PersianDateUtils.formatToPersianDateTime(timestamp)
 }
