@@ -13,6 +13,7 @@ import com.example.data.api.PayLinkApi
 import com.example.data.local.PayLinkDatabase
 import com.example.data.local.entity.CachedInvoiceEntity
 import com.example.data.local.entity.ProcessedPaymentEntity
+import com.example.data.local.entity.RejectedInvoiceEntity
 import com.example.data.model.AccountStatusData
 import com.example.data.model.HeartbeatRequest
 import com.example.data.model.InvoiceDetail
