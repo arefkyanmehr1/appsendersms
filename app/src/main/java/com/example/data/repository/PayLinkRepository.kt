@@ -115,9 +115,8 @@ class PayLinkRepository(
                     val rawInvoices = body.data.invoices ?: emptyList()
 
                     // Filter out any invoice that the merchant has already rejected locally
-                    val activeInvoices = rawInvoices.filter { inv ->
-                        database.rejectedInvoiceDao().isRejected(inv.orderId) == 0
-                    }
+                    // The backend is authoritative. A local rejection marker must never
+                    // hide a server-side pending invoice, especially after account changes.
 
                     // Detect brand new pending invoices to notify merchant
                     val notificationPrefs = com.example.core.util.NotificationPreferences(context)
@@ -368,31 +367,9 @@ class PayLinkRepository(
                 val serverData = body.data ?: TransactionHistoryData(page = page, limit = limit, total = 0)
                 val serverList = serverData.transactions
 
-                // Merge server transactions with any local rejected or manual transactions not present on server
-                val knownOrderIds = serverList.mapNotNull { it.orderId }.toSet()
-                val additionalLocal = localItems.filter { it.orderId != null && !knownOrderIds.contains(it.orderId) }
-
-                val seenOrderIds = mutableSetOf<String>()
-                val mergedList = mutableListOf<com.example.data.model.TransactionItem>()
-                for (item in (serverList + additionalLocal)) {
-                    val oid = item.orderId
-                    if (!oid.isNullOrBlank()) {
-                        if (seenOrderIds.add(oid)) {
-                            mergedList.add(item)
-                        }
-                    } else {
-                        mergedList.add(item)
-                    }
-                }
-                mergedList.sortByDescending { it.id }
-                val totalCount = maxOf(serverData.total, mergedList.size)
-
-                NetworkResult.Success(
-                    serverData.copy(
-                        total = totalCount,
-                        transactions = mergedList
-                    )
-                )
+                // Successful server history is authoritative. Local rows are only a
+                // fallback when the server cannot be reached.
+                NetworkResult.Success(serverData)
             }
         } catch (e: Exception) {
             AppLogger.e("Failed to get transaction history from server, falling back to local records", e)
