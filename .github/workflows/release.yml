@@ -3,8 +3,6 @@ name: Android Release
 on:
   workflow_dispatch:
   push:
-    branches:
-      - 'overhaul/fresh-production-fix'
     tags:
       - 'v*'
 
