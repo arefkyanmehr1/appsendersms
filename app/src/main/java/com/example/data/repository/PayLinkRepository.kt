@@ -320,9 +320,12 @@ class PayLinkRepository(
                     return@withContext NetworkResult.Error(422, "سرور تأیید پرداخت را نپذیرفت.", ErrorType.VALIDATION_ERROR)
                 database.cachedInvoiceDao().deleteByOrderId(safeOrderId)
                 database.processedPaymentDao().insert(ProcessedPaymentEntity(
-                    smsHash = request.rawSmsHash, amount = amount, orderId = safeOrderId,
-                    trackingCode = safeTracking, bankName = "تأیید دستی پذیرنده", cardLast4 = cleanCard,
-                    status = "VERIFIED", receivedAt = System.currentTimeMillis(), verifiedAt = System.currentTimeMillis()
+                    smsHash = com.example.core.security.HashUtils.sha256Hex("manual|$safeOrderId|$amount"),
+                    amount = amount,
+                    orderId = safeOrderId,
+                    status = "VERIFIED",
+                    receivedAt = System.currentTimeMillis(),
+                    verifiedAt = System.currentTimeMillis()
                 ))
                 result
             }
