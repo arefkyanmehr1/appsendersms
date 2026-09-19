@@ -229,57 +229,6 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private var livePollingJob: Job? = null
-
-    private fun startLivePolling() {
-        livePollingJob?.cancel()
-        livePollingJob = viewModelScope.launch {
-            while (true) {
-                delay(4_000) // Fast 4-second polling while app is active for instant notification & state updates
-                if (secureStorage.hasApiKey()) {
-                    repository.getPendingInvoices(limit = 50)
-                }
-            }
-        }
-    }
-
-    private fun stopLivePolling() {
-        livePollingJob?.cancel()
-        livePollingJob = null
-    }
-
-    init {
-        if (secureStorage.hasApiKey()) {
-            refreshAll()
-            startLivePolling()
-        }
-
-        // Keep UI reactive to database cache updates immediately
-        viewModelScope.launch {
-            repository.cachedPendingInvoices.collect { cachedList ->
-                val models = cachedList.map {
-                    PendingInvoice(
-                        id = it.id,
-                        orderId = it.orderId,
-                        baseAmount = it.baseAmount,
-                        payableAmount = it.payableAmount,
-                        expectedAmount = it.expectedAmount,
-                        status = it.status,
-                        createdAt = it.createdAt,
-                        expiresAt = it.expiresAt,
-                        remainingSeconds = it.remainingSeconds,
-                        customerName = it.customerName,
-                        customerPhone = it.customerPhone,
-                        customerUsername = it.customerUsername,
-                        description = it.description,
-                        extraData = it.extraData
-                    )
-                }
-                _invoicesState.value = _invoicesState.value.copy(invoices = models)
-            }
-        }
-    }
-
     private val webAuthService = WebAuthService()
 
     fun loginWithCredentials(username: String, password: String) {
@@ -318,8 +267,7 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
                             )
                             repository.sendHeartbeat()
                             refreshPendingInvoices()
-                            startLivePolling()
-                        }
+                                        }
                         else -> {
                             _isConnecting.value = false
                             app.scheduleBackgroundWorkers()
