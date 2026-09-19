@@ -38,7 +38,10 @@ abstract class PayLinkDatabase : RoomDatabase() {
 
         private val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                // Logic-only release; preserve all existing Room data.
+                // Remove legacy fake rejection rows created by the old client.
+                // The server is now the source of truth for transaction history.
+                database.execSQL("DELETE FROM rejected_invoices")
+                database.execSQL("DELETE FROM processed_payments WHERE status = 'REJECTED' AND amount = 0")
             }
         }
 
