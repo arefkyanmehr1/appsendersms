@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
@@ -32,24 +31,12 @@ class InvoiceMonitorService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private var pollJob: Job? = null
-    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         AppLogger.i("InvoiceMonitorService created.")
-        try {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
-            wakeLock = powerManager?.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "PayLink::InvoiceMonitorWakeLock"
-            )?.apply {
-                setReferenceCounted(false)
-            }
-        } catch (e: Exception) {
-            AppLogger.w("Could not acquire wake lock: ${e.message}")
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -77,23 +64,15 @@ class InvoiceMonitorService : Service() {
             val app = applicationContext as? PayLinkApplication ?: return@launch
             while (isActive) {
                 try {
-                    wakeLock?.acquire(3000)
                     if (app.secureStorage.hasApiKey()) {
                         // Polling pending invoices automatically syncs and triggers notifications for new invoices
                         app.repository.getPendingInvoices(limit = 50)
                     }
                 } catch (e: Exception) {
                     AppLogger.w("Background poll failed: ${e.message}")
-                } finally {
-                    try {
-                        if (wakeLock?.isHeld == true) {
-                            wakeLock?.release()
-                        }
-                    } catch (_: Exception) {
-                    }
                 }
-                // Check every 7 seconds for ultra-fast instant notification
-                delay(7_000)
+                // One background poller; SMS verification itself is event-driven.
+                delay(15_000)
             }
         }
     }
@@ -144,12 +123,6 @@ class InvoiceMonitorService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         AppLogger.i("InvoiceMonitorService destroyed.")
-        try {
-            if (wakeLock?.isHeld == true) {
-                wakeLock?.release()
-            }
-        } catch (_: Exception) {
-        }
         pollJob?.cancel()
         serviceScope.cancel()
     }

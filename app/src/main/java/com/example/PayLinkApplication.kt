@@ -66,7 +66,7 @@ class PayLinkApplication : Application() {
         )
 
         // Invoice Sync Worker: Every 15 minutes
-        val invoiceSyncRequest = PeriodicWorkRequestBuilder<InvoiceSyncWorker>(15, TimeUnit.MINUTES)
+        val invoiceSyncRequest = PeriodicWorkRequestBuilder<InvoiceSyncWorker>(30, TimeUnit.MINUTES)
             .setConstraints(networkConstraints)
             .build()
 
