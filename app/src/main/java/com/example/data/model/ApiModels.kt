@@ -139,11 +139,7 @@ data class RejectInvoiceRequest(
 @JsonClass(generateAdapter = true)
 data class VerifyPaymentRequest(
     @Json(name = "order_id") val orderId: String,
-    @Json(name = "amount") val amount: Long,
-    @Json(name = "bank_name") val bankName: String?,
-    @Json(name = "tracking_code") val trackingCode: String?,
-    @Json(name = "card_last4") val cardLast4: String?,
-    @Json(name = "raw_sms_hash") val rawSmsHash: String
+    @Json(name = "amount") val amount: Long
 )
 
 @JsonClass(generateAdapter = true)
