@@ -421,7 +421,14 @@ class PayLinkRepository(
             val response = api.getTransactionHistory(page, limit)
             handleResponse(response) { body ->
                 val serverData = body.data ?: TransactionHistoryData(page = page, limit = limit, total = 0)
-                val serverList = serverData.transactions
+                // Never surface malformed legacy rejected rows (for example zero-amount rows)
+                // as real transactions. A valid payment/order transaction must have an order id
+                // and a positive amount.
+                val serverList = serverData.transactions.filter { item ->
+                    val status = item.safeStatus
+                    val rejected = status in setOf("rejected", "cancelled", "failed", "expired")
+                    !rejected || (item.orderId?.isNotBlank() == true && item.amount > 0L)
+                }
 
                 // Merge server transactions with any local rejected or manual transactions not present on server
                 val knownOrderIds = serverList.mapNotNull { it.orderId }.toSet()
