@@ -31,6 +31,9 @@ interface ProcessedPaymentDao {
     @Query("DELETE FROM processed_payments WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    @Query("DELETE FROM processed_payments WHERE smsHash = :smsHash")
+    suspend fun deleteBySmsHash(smsHash: String)
+
     @Query("DELETE FROM processed_payments")
     suspend fun deleteAll()
 }
