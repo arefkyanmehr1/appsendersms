@@ -319,7 +319,7 @@ fun PendingInvoicesScreen(
                                     isRejecting = invoicesState.rejectingOrderIds.contains(invoice.orderId),
                                     isVerifying = invoicesState.verifyingOrderIds.contains(invoice.orderId),
                                     onReject = { orderId, reason ->
-                                        viewModel.rejectInvoice(orderId, reason)
+                                        viewModel.rejectInvoice(orderId, reason, invoice.effectiveAmount)
                                     },
                                     onVerifyManually = { orderId, amount, trackingCode, cardLast4 ->
                                         viewModel.verifyInvoiceManually(orderId, amount, trackingCode, cardLast4)
