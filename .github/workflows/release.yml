@@ -38,6 +38,7 @@ jobs:
 
       - name: Build APK
         env:
+          JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
           KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
         run: gradle :app:assembleDebug --no-daemon --stacktrace
 
