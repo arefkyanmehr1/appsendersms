@@ -41,20 +41,12 @@ class VerificationWorker(
             val request = VerifyPaymentRequest(
                 orderId = orderId,
                 amount = item.amount,
-                bankName = item.bankName,
-                trackingCode = item.trackingCode,
-                cardLast4 = item.cardLast4,
-                rawSmsHash = item.smsHash
             )
 
             when (val result = repository.verifyPayment(request)) {
                 is NetworkResult.Success -> {
                     AppLogger.i("Offline payment verified: orderId=$orderId")
-                    repository.updateProcessedPaymentStatus(
-                        id = item.id,
-                        status = "VERIFIED",
-                        verifiedAt = System.currentTimeMillis()
-                    )
+                    repository.deleteProcessedPayment(item.id)
                     NotificationHelper.showPaymentVerifiedNotification(
                         context = applicationContext,
                         orderId = orderId,
@@ -67,11 +59,7 @@ class VerificationWorker(
                 is NetworkResult.Error -> {
                     when (result.errorType) {
                         ErrorType.CONFLICT -> {
-                            repository.updateProcessedPaymentStatus(
-                                id = item.id,
-                                status = "DUPLICATE",
-                                errorMessage = "قبلاً تأیید شده است"
-                            )
+                            repository.deleteProcessedPayment(item.id)
                         }
                         ErrorType.NO_INTERNET, ErrorType.TIMEOUT, ErrorType.SERVER_ERROR -> {
                             hasTransientError = true
