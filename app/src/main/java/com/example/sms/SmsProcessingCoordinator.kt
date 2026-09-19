@@ -2,6 +2,7 @@ package com.example.sms
 
 import android.content.Context
 import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -251,6 +252,10 @@ class SmsProcessingCoordinator(
         val request = OneTimeWorkRequestBuilder<VerificationWorker>()
             .setConstraints(constraints)
             .build()
-        WorkManager.getInstance(context).enqueue(request)
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "PayLinkVerificationQueue",
+            ExistingWorkPolicy.KEEP,
+            request
+        )
     }
 }
