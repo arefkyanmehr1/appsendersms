@@ -150,26 +150,36 @@ class PayLinkViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
-    fun rejectInvoice(orderId: String, reason: String = "سفارش توسط پذیرنده رد شد") {
+    fun rejectInvoice(orderId: String, reason: String = "سفارش توسط پذیرنده رد شد", amount: Long = 0L) {
         viewModelScope.launch {
-            // Optimistic update: mark as rejecting and remove from active list immediately
             _invoicesState.value = _invoicesState.value.copy(
-                rejectingOrderIds = _invoicesState.value.rejectingOrderIds + orderId,
-                invoices = _invoicesState.value.invoices.filter { it.orderId != orderId }
+                rejectingOrderIds = _invoicesState.value.rejectingOrderIds + orderId, errorMessage = null
             )
-
-            val result = repository.rejectInvoice(orderId, reason)
-            _invoicesState.value = _invoicesState.value.copy(
-                rejectingOrderIds = _invoicesState.value.rejectingOrderIds - orderId,
-                successMessage = "سفارش $orderId با موفقیت لغو شد و وب‌هوک به فروشگاه/ربات ارسال گردید.",
-                errorMessage = null
-            )
-            // Auto-clear success message after 5 seconds
-            launch {
-                delay(5000)
-                clearInvoiceMessages()
+            when (val result = repository.rejectInvoice(orderId, reason, amount)) {
+                is NetworkResult.Success -> {
+                    _invoicesState.value = _invoicesState.value.copy(
+                        rejectingOrderIds = _invoicesState.value.rejectingOrderIds - orderId,
+                        invoices = _invoicesState.value.invoices.filter { it.orderId != orderId },
+                        successMessage = "سفارش ${'$'}orderId با موفقیت توسط سرور لغو شد.", errorMessage = null
+                    )
+                    refreshTransactions(1)
+                }
+                is NetworkResult.Error -> {
+                    _invoicesState.value = _invoicesState.value.copy(
+                        rejectingOrderIds = _invoicesState.value.rejectingOrderIds - orderId,
+                        errorMessage = "رد سفارش ناموفق بود: ${'$'}{result.errorType.toPersianMessage(result.message)}"
+                    )
+                    refreshPendingInvoices()
+                }
+                is NetworkResult.Exception -> {
+                    _invoicesState.value = _invoicesState.value.copy(
+                        rejectingOrderIds = _invoicesState.value.rejectingOrderIds - orderId,
+                        errorMessage = "ارتباط با سرور برای رد سفارش برقرار نشد."
+                    )
+                    refreshPendingInvoices()
+                }
             }
-            repository.getPendingInvoices(limit = 50)
+            launch { delay(5000); clearInvoiceMessages() }
         }
     }
 
