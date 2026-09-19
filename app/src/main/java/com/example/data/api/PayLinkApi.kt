@@ -14,6 +14,7 @@ import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Query
 
@@ -37,11 +38,13 @@ interface PayLinkApi {
 
     @POST("verify_payment.php")
     suspend fun verifyPayment(
+        @Header("Idempotency-Key") idempotencyKey: String,
         @Body request: VerifyPaymentRequest
     ): Response<ApiResponse<VerifyPaymentData>>
 
     @POST("verify_payment.php")
     suspend fun rejectInvoice(
+        @Header("Idempotency-Key") idempotencyKey: String,
         @Body request: RejectInvoiceRequest
     ): Response<SimpleActionResponse>
 
