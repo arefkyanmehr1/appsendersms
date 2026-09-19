@@ -100,62 +100,42 @@ class GenericIranianPaymentParser : PaymentSmsParser {
     }
 
     private fun extractAmount(text: String): Long? {
-        // Split by lines or punctuation to avoid picking up the balance ("موجودی")
-        val lines = text.split("\n", "،", ";", " - ")
+        val lines = text.split('\n', '،', ';').map { it.trim() }.filter { it.isNotBlank() }
+        val balanceWords = listOf("موجودی", "مانده", "باقیمانده", "balance", "available")
+        val labelled = Pattern.compile(
+            "(?:مبلغ|مبلغ واریز|واریز(?: شد|شده)?|دریافت وجه|بستانکار)[:\\s]*([0-9][0-9,\\.]{2,18})\\s*(ریال|تومان)?",
+            Pattern.CASE_INSENSITIVE
+        )
 
-        // First look for lines containing explicit deposit / amount keywords
-        val depositLines = lines.filter { line ->
-            !line.contains("موجودی") && !line.contains("مانده") && !line.contains("باقیمانده") &&
-                    (depositKeywords.any { line.contains(it) } || line.contains("مبلغ"))
+        fun parse(raw: String, unit: String?, source: String): Long? {
+            val digits = raw.replace(",", "").replace(".", "")
+            val value = digits.toLongOrNull() ?: return null
+            if (value <= 0L) return null
+            if (balanceWords.any { source.contains(it, ignoreCase = true) }) return null
+            return try {
+                if (unit == "تومان" || source.contains("تومان")) Math.multiplyExact(value, 10L) else value
+            } catch (_: ArithmeticException) { null }
         }
 
-        val candidatesToSearch = if (depositLines.isNotEmpty()) depositLines else lines
-
-        for (line in candidatesToSearch) {
-            // Ignore balance line
-            if (line.contains("موجودی") || line.contains("مانده") || line.contains("باقیمانده")) {
-                continue
-            }
-
-            // Patterns like: "مبلغ: 101,000 ریال", "واریز: 101000", "واریز 10,100 تومان"
-            val pattern = Pattern.compile(
-                "(?:مبلغ|واریز|واریزشده|به مبلغ)?[:\\s]*([0-9][0-9,\\.]{2,15})\\s*(ریال|تومان)?"
-            )
-            val matcher = pattern.matcher(line)
+        // Prefer an explicitly labelled amount. This avoids card, reference, date and balance numbers.
+        for (line in lines) {
+            if (balanceWords.any { line.contains(it, ignoreCase = true) }) continue
+            val matcher = labelled.matcher(line)
             if (matcher.find()) {
-                val rawNumberStr = matcher.group(1) ?: continue
-                val unit = matcher.group(2)
-                val cleanDigits = rawNumberStr.replace(",", "").replace(".", "").trim()
-                val parsedNumber = cleanDigits.toLongOrNull() ?: continue
-
-                if (parsedNumber <= 0) continue
-
-                // Currency normalization:
-                // If تومان explicitly specified, convert 1 Toman = 10 Rials (Backend operates in Rials)
-                return if (unit == "تومان" || line.contains("تومان")) {
-                    parsedNumber * 10L
-                } else {
-                    parsedNumber
-                }
+                parse(matcher.group(1) ?: continue, matcher.group(2), line)?.let { return it }
             }
         }
 
-        // Fallback search across whole text without balance section
-        val balanceIndex = text.indexOf("موجودی").takeIf { it >= 0 }
-            ?: text.indexOf("مانده").takeIf { it >= 0 }
-            ?: text.length
-
-        val subText = text.substring(0, balanceIndex)
-        val generalPattern = Pattern.compile("([0-9][0-9,]{3,15})\\s*(ریال|تومان)?")
-        val generalMatcher = generalPattern.matcher(subText)
-        if (generalMatcher.find()) {
-            val numStr = generalMatcher.group(1)?.replace(",", "")?.trim() ?: return null
-            val unit = generalMatcher.group(2)
-            val parsed = numStr.toLongOrNull() ?: return null
-            return if (unit == "تومان") parsed * 10L else parsed
-        }
-
-        return null
+        // Conservative fallback: only accept exactly one plausible amount before the balance section.
+        if (!depositKeywords.any { text.contains(it, ignoreCase = true) }) return null
+        val balanceIndex = balanceWords.map { text.indexOf(it, ignoreCase = true) }.filter { it >= 0 }.minOrNull() ?: text.length
+        val beforeBalance = text.substring(0, balanceIndex)
+        val candidates = Regex("(?<!\\d)([0-9][0-9,]{3,15})(?!\\d)")
+            .findAll(beforeBalance)
+            .mapNotNull { match -> parse(match.groupValues[1], null, match.value) }
+            .distinct()
+            .toList()
+        return candidates.singleOrNull()
     }
 
     private fun extractTrackingCode(text: String): String? {
