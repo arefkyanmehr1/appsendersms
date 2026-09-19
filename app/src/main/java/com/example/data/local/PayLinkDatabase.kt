@@ -2,6 +2,8 @@ package com.example.data.local
 
 import android.content.Context
 import androidx.room.Database
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.data.local.dao.CachedInvoiceDao
@@ -20,7 +22,7 @@ import com.example.data.local.entity.RejectedInvoiceEntity
         NotifiedInvoiceEntity::class,
         RejectedInvoiceEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class PayLinkDatabase : RoomDatabase() {
@@ -34,6 +36,12 @@ abstract class PayLinkDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: PayLinkDatabase? = null
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Compatibility-only migration: schema is unchanged.
+            }
+        }
+
         fun getInstance(context: Context): PayLinkDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -41,7 +49,7 @@ abstract class PayLinkDatabase : RoomDatabase() {
                     PayLinkDatabase::class.java,
                     "paylink_database"
                 )
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(MIGRATION_4_5)
                     .build()
                 INSTANCE = instance
                 instance
