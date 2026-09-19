@@ -217,13 +217,20 @@ class PayLinkRepository(
                 return@withContext NetworkResult.Error(0, "عدم اتصال به اینترنت", ErrorType.NO_INTERNET)
             }
             try {
-                val response = api.verifyPayment(request)
+                val response = api.verifyPayment(request.rawSmsHash, request)
                 handleResponse(response) { body ->
-                    if (body.success && body.data != null) {
-                        NetworkResult.Success(body.data)
-                    } else {
-                        NetworkResult.Error(200, body.message ?: "خطا در تایید پرداخت", ErrorType.UNKNOWN)
+                    val data = body.data
+                    if (!body.success || data == null) {
+                        return@handleResponse NetworkResult.Error(200, body.message ?: "خطا در تایید پرداخت", ErrorType.UNKNOWN)
                     }
+                    val returnedOrder = data.orderId?.trim()
+                    if (!returnedOrder.isNullOrBlank() && returnedOrder != request.orderId.trim()) {
+                        return@handleResponse NetworkResult.Error(409, "شناسه سفارش پاسخ سرور با سفارش درخواست‌شده مطابقت ندارد.", ErrorType.CONFLICT)
+                    }
+                    if (data.verified == false || data.status?.lowercase() in setOf("failed", "rejected", "cancelled", "expired")) {
+                        return@handleResponse NetworkResult.Error(422, "سرور پرداخت را تأیید نکرد.", ErrorType.VALIDATION_ERROR)
+                    }
+                    NetworkResult.Success(data)
                 }
             } catch (e: Exception) {
                 AppLogger.e("Failed to verify payment", e)
